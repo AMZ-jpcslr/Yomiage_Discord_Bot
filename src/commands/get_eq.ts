@@ -18,10 +18,14 @@ export async function execute(interaction: ChatInputCommandInteraction) {
         const latestId = list[0].json
         console.log('最新地震ID:', latestId)
 
-        // 共通関数を使用して地震情報の埋め込みを作成
-        const embed = await createEarthquakeEmbed(latestId, false)
+        // 共通関数を使用して地震情報を取得
+        const result = await createEarthquakeEmbed(latestId, false)
         
-        await interaction.editReply({ embeds: [embed] })
+        // ファイル添付付きで返信
+        await interaction.editReply({ 
+            embeds: [result.embed], 
+            files: result.files 
+        })
     } catch (e) {
         console.error(e)
         await interaction.editReply('地震情報の取得中にエラーが発生しました。')

@@ -62,7 +62,7 @@ function startEqAutoNotify(client) {
             console.log('新しい地震情報を検出:', latestId);
             console.log('前回の地震ID:', previousLatestId);
             // 共通関数を使用して地震情報の埋め込みを作成
-            const embed = yield (0, earthquake_1.createEarthquakeEmbed)(latestId, true);
+            const result = yield (0, earthquake_1.createEarthquakeEmbed)(latestId, true);
             // 通知チャンネルへ送信
             const channels = loadChannels();
             let notificationCount = 0;
@@ -76,7 +76,10 @@ function startEqAutoNotify(client) {
                 const channel = guild.channels.cache.get(channelId);
                 if (channel && channel.isTextBased()) {
                     try {
-                        yield channel.send({ embeds: [embed] });
+                        yield channel.send({
+                            embeds: [result.embed],
+                            files: result.files
+                        });
                         notificationCount++;
                         console.log(`地震通知送信完了: ${guild.name} (#${channel.name})`);
                     }

@@ -54,7 +54,7 @@ export function startEqAutoNotify(client: Client) {
             console.log('前回の地震ID:', previousLatestId)
 
             // 共通関数を使用して地震情報の埋め込みを作成
-            const embed = await createEarthquakeEmbed(latestId, true)
+            const result = await createEarthquakeEmbed(latestId, true)
 
             // 通知チャンネルへ送信
             const channels = loadChannels()
@@ -71,7 +71,10 @@ export function startEqAutoNotify(client: Client) {
                 const channel = guild.channels.cache.get(channelId) as TextChannel
                 if (channel && channel.isTextBased()) {
                     try {
-                        await channel.send({ embeds: [embed] })
+                        await channel.send({ 
+                            embeds: [result.embed], 
+                            files: result.files 
+                        })
                         notificationCount++
                         console.log(`地震通知送信完了: ${guild.name} (#${channel.name})`)
                     } catch (error) {

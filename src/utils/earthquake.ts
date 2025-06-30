@@ -1,4 +1,6 @@
-import { EmbedBuilder } from 'discord.js'
+import { EmbedBuilder, AttachmentBuilder } from 'discord.js'
+import { generateEarthquakeMap, extractEarthquakeMapData } from './mapGenerator'
+import * as path from 'path'
 
 // 震度値を文字列に変換する関数
 function maxScaleToString(maxScale: number): string {
@@ -43,7 +45,7 @@ function getShindoImageUrl(maxScale: any): string | undefined {
 }
 
 // 地震情報の埋め込みを作成する共通関数
-export async function createEarthquakeEmbed(latestId: string, isAutoNotify = false): Promise<EmbedBuilder> {
+export async function createEarthquakeEmbed(latestId: string, isAutoNotify = false): Promise<{ embed: EmbedBuilder, files?: AttachmentBuilder[] }> {
     const detailRes = await fetch(`https://www.jma.go.jp/bosai/quake/data/${latestId}`)
     const detail = await detailRes.json() as any
 
@@ -58,25 +60,22 @@ export async function createEarthquakeEmbed(latestId: string, isAutoNotify = fal
     // 震度画像URL取得
     const shindoImageUrl = getShindoImageUrl(maxScale)
 
-    // 画像URL生成（複数パターンを試行）
-    const baseImageName = latestId.replace('.json', '')
-    const eventId = detail?.Head?.EventID
+    // 独自の地震マップ画像を生成
+    let generatedMapPath: string | null = null
+    let attachments: AttachmentBuilder[] = []
     
-    let possibleImageUrls = [
-        // 基本パターン
-        `https://www.jma.go.jp/bosai/quake/data/${baseImageName}.png`,
-        // EventIDベース
-        eventId ? `https://www.jma.go.jp/bosai/quake/data/${eventId}.png` : null,
-        eventId ? `https://www.jma.go.jp/bosai/quake/data/map/${eventId}.png` : null,
-        eventId ? `https://www.jma.go.jp/bosai/quake/data/detail/${eventId}.png` : null,
-        // 代替の固定画像
-        `https://www.jma.go.jp/bosai/forecast/img/warn_quake.png`,
-        `https://www.jma.go.jp/bosai/quake/data/quake_map.png`
-    ].filter(Boolean) as string[]
-
-    // 震度画像をプレースホルダーとして追加
-    if (shindoImageUrl) {
-        possibleImageUrls.push(shindoImageUrl)
+    try {
+        const earthquakeMapData = extractEarthquakeMapData(detail)
+        generatedMapPath = await generateEarthquakeMap(earthquakeMapData)
+        
+        // 生成された画像をDiscordの添付ファイルとして準備
+        const attachment = new AttachmentBuilder(generatedMapPath, { 
+            name: 'earthquake_map.png' 
+        })
+        attachments.push(attachment)
+        console.log('独自地震マップ画像を生成しました:', generatedMapPath)
+    } catch (error) {
+        console.error('地震マップ画像生成エラー:', error)
     }
 
     // 埋め込み作成
@@ -100,23 +99,10 @@ export async function createEarthquakeEmbed(latestId: string, isAutoNotify = fal
         embed.setThumbnail(shindoImageUrl)
     }
 
-    // 気象庁の画像を試行して設定
-    let validImageUrl: string | null = null
-    for (const url of possibleImageUrls) {
-        if (!url) continue
-        try {
-            const imageCheckResponse = await fetch(url, { method: 'HEAD' })
-            if (imageCheckResponse.ok) {
-                validImageUrl = url
-                break
-            }
-        } catch (error) {
-            // エラーは無視して次のURLを試行
-        }
-    }
-
-    if (validImageUrl) {
-        embed.setImage(validImageUrl)
+    // 生成された地震マップ画像をメイン画像として設定
+    if (generatedMapPath) {
+        embed.setImage('attachment://earthquake_map.png')
+        console.log('生成された地震マップをメイン画像に設定')
     } else {
         // 代替として震度分布図のリンクを表示
         embed.addFields({ 
@@ -133,5 +119,5 @@ export async function createEarthquakeEmbed(latestId: string, isAutoNotify = fal
     })
     embed.setTimestamp(new Date())
 
-    return embed
+    return { embed, files: attachments.length > 0 ? attachments : undefined }
 }

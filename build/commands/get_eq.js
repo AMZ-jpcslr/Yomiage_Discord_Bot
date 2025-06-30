@@ -28,9 +28,13 @@ function execute(interaction) {
             }
             const latestId = list[0].json;
             console.log('最新地震ID:', latestId);
-            // 共通関数を使用して地震情報の埋め込みを作成
-            const embed = yield (0, earthquake_1.createEarthquakeEmbed)(latestId, false);
-            yield interaction.editReply({ embeds: [embed] });
+            // 共通関数を使用して地震情報を取得
+            const result = yield (0, earthquake_1.createEarthquakeEmbed)(latestId, false);
+            // ファイル添付付きで返信
+            yield interaction.editReply({
+                embeds: [result.embed],
+                files: result.files
+            });
         }
         catch (e) {
             console.error(e);

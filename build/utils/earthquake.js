@@ -11,6 +11,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.createEarthquakeEmbed = createEarthquakeEmbed;
 const discord_js_1 = require("discord.js");
+const mapGenerator_1 = require("./mapGenerator");
 // 震度値を文字列に変換する関数
 function maxScaleToString(maxScale) {
     switch (maxScale) {
@@ -54,7 +55,7 @@ function getShindoImageUrl(maxScale) {
 // 地震情報の埋め込みを作成する共通関数
 function createEarthquakeEmbed(latestId_1) {
     return __awaiter(this, arguments, void 0, function* (latestId, isAutoNotify = false) {
-        var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p, _q, _r, _s, _t, _u, _v, _w, _x;
+        var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p, _q, _r, _s, _t, _u, _v, _w;
         const detailRes = yield fetch(`https://www.jma.go.jp/bosai/quake/data/${latestId}`);
         const detail = yield detailRes.json();
         const time = (_b = (_a = detail.Head) === null || _a === void 0 ? void 0 : _a.ReportDateTime) !== null && _b !== void 0 ? _b : '不明';
@@ -66,23 +67,21 @@ function createEarthquakeEmbed(latestId_1) {
         const maxScaleStr = maxScale !== '不明' ? maxScaleToString(Number(maxScale)) : '不明';
         // 震度画像URL取得
         const shindoImageUrl = getShindoImageUrl(maxScale);
-        // 画像URL生成（複数パターンを試行）
-        const baseImageName = latestId.replace('.json', '');
-        const eventId = (_x = detail === null || detail === void 0 ? void 0 : detail.Head) === null || _x === void 0 ? void 0 : _x.EventID;
-        let possibleImageUrls = [
-            // 基本パターン
-            `https://www.jma.go.jp/bosai/quake/data/${baseImageName}.png`,
-            // EventIDベース
-            eventId ? `https://www.jma.go.jp/bosai/quake/data/${eventId}.png` : null,
-            eventId ? `https://www.jma.go.jp/bosai/quake/data/map/${eventId}.png` : null,
-            eventId ? `https://www.jma.go.jp/bosai/quake/data/detail/${eventId}.png` : null,
-            // 代替の固定画像
-            `https://www.jma.go.jp/bosai/forecast/img/warn_quake.png`,
-            `https://www.jma.go.jp/bosai/quake/data/quake_map.png`
-        ].filter(Boolean);
-        // 震度画像をプレースホルダーとして追加
-        if (shindoImageUrl) {
-            possibleImageUrls.push(shindoImageUrl);
+        // 独自の地震マップ画像を生成
+        let generatedMapPath = null;
+        let attachments = [];
+        try {
+            const earthquakeMapData = (0, mapGenerator_1.extractEarthquakeMapData)(detail);
+            generatedMapPath = yield (0, mapGenerator_1.generateEarthquakeMap)(earthquakeMapData);
+            // 生成された画像をDiscordの添付ファイルとして準備
+            const attachment = new discord_js_1.AttachmentBuilder(generatedMapPath, {
+                name: 'earthquake_map.png'
+            });
+            attachments.push(attachment);
+            console.log('独自地震マップ画像を生成しました:', generatedMapPath);
+        }
+        catch (error) {
+            console.error('地震マップ画像生成エラー:', error);
         }
         // 埋め込み作成
         const title = isAutoNotify ? '🚨 【自動通知】地震情報' : '🚨 地震情報';
@@ -97,24 +96,10 @@ function createEarthquakeEmbed(latestId_1) {
         if (shindoImageUrl) {
             embed.setThumbnail(shindoImageUrl);
         }
-        // 気象庁の画像を試行して設定
-        let validImageUrl = null;
-        for (const url of possibleImageUrls) {
-            if (!url)
-                continue;
-            try {
-                const imageCheckResponse = yield fetch(url, { method: 'HEAD' });
-                if (imageCheckResponse.ok) {
-                    validImageUrl = url;
-                    break;
-                }
-            }
-            catch (error) {
-                // エラーは無視して次のURLを試行
-            }
-        }
-        if (validImageUrl) {
-            embed.setImage(validImageUrl);
+        // 生成された地震マップ画像をメイン画像として設定
+        if (generatedMapPath) {
+            embed.setImage('attachment://earthquake_map.png');
+            console.log('生成された地震マップをメイン画像に設定');
         }
         else {
             // 代替として震度分布図のリンクを表示
@@ -130,6 +115,6 @@ function createEarthquakeEmbed(latestId_1) {
             iconURL: 'https://www.jma.go.jp/jma/kishou/favicon.ico'
         });
         embed.setTimestamp(new Date());
-        return embed;
+        return { embed, files: attachments.length > 0 ? attachments : undefined };
     });
 }
