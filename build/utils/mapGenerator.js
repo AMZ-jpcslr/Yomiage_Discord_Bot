@@ -48,7 +48,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.generateEarthquakeMap = generateEarthquakeMap;
 exports.extractEarthquakeMapData = extractEarthquakeMapData;
 const path = __importStar(require("path"));
-const canvas_1 = require("canvas");
+const jsdom_1 = require("jsdom");
 const sharp_1 = __importDefault(require("sharp"));
 // 日本地図のGeoJSONデータ（簡略化）
 const japanGeoJSON = {
@@ -74,25 +74,29 @@ function generateEarthquakeMap(earthquakeData) {
         const height = 600;
         const center = [139.69, 35.68]; // 東京を中心
         const scale = 4000;
-        // Canvasを作成
-        const canvas = (0, canvas_1.createCanvas)(width, height);
-        const context = canvas.getContext('2d');
-        // 背景色（海）
-        context.fillStyle = '#4A90E2';
-        context.fillRect(0, 0, width, height);
+        // JSDOMでSVG環境を作成
+        const dom = new jsdom_1.JSDOM(`<!DOCTYPE html><html><body></body></html>`);
+        global.document = dom.window.document;
+        global.window = dom.window;
         // 地図投影の設定
         const projection = d3.geoMercator()
             .center(center)
             .translate([width / 2, height / 2])
             .scale(scale);
         const geoPath = d3.geoPath()
-            .projection(projection)
-            .context(context);
-        // 陸地を描画
-        context.fillStyle = '#F5F5DC';
-        context.strokeStyle = '#8B4513';
-        context.lineWidth = 1;
-        // 日本列島の基本形状を描画（簡略化）
+            .projection(projection);
+        // SVG要素を作成
+        const svg = d3.select(dom.window.document.body)
+            .append('svg')
+            .attr('width', width)
+            .attr('height', height)
+            .attr('xmlns', 'http://www.w3.org/2000/svg');
+        // 背景（海）
+        svg.append('rect')
+            .attr('width', width)
+            .attr('height', height)
+            .attr('fill', '#4A90E2');
+        // 日本列島の基本形状を描画
         const japanOutline = [
             // 本州の大まかな輪郭
             [138.5, 35.0], [139.0, 35.5], [140.0, 36.0], [141.0, 37.0],
@@ -102,78 +106,114 @@ function generateEarthquakeMap(earthquakeData) {
             [133.0, 34.5], [134.0, 34.0], [135.0, 34.0], [136.0, 34.5],
             [137.0, 34.8], [138.0, 35.0], [138.5, 35.0]
         ];
-        context.beginPath();
-        japanOutline.forEach((coord, index) => {
-            const [x, y] = projection(coord) || [0, 0];
-            if (index === 0) {
-                context.moveTo(x, y);
-            }
-            else {
-                context.lineTo(x, y);
-            }
+        // 日本の輪郭を描画
+        const lineFunction = d3.line()
+            .x(d => { var _a; return ((_a = projection(d)) === null || _a === void 0 ? void 0 : _a[0]) || 0; })
+            .y(d => { var _a; return ((_a = projection(d)) === null || _a === void 0 ? void 0 : _a[1]) || 0; })
+            .curve(d3.curveLinear);
+        svg.append('path')
+            .datum(japanOutline)
+            .attr('d', lineFunction)
+            .attr('fill', '#F5F5DC')
+            .attr('stroke', '#8B4513')
+            .attr('stroke-width', 1);
+        // 四国、九州、北海道の簡略的な描画
+        const shikoku = [
+            [133.0, 33.5], [134.5, 33.0], [134.8, 34.2], [132.8, 34.0], [133.0, 33.5]
+        ];
+        const kyushu = [
+            [129.5, 31.0], [131.5, 31.0], [131.8, 33.5], [129.8, 33.8], [129.5, 31.0]
+        ];
+        const hokkaido = [
+            [139.5, 41.5], [146.0, 42.0], [146.0, 45.5], [140.0, 45.8], [139.5, 41.5]
+        ];
+        // 追加の島々を描画
+        const islands = [shikoku, kyushu, hokkaido];
+        islands.forEach((island) => {
+            svg.append('path')
+                .datum(island)
+                .attr('d', lineFunction)
+                .attr('fill', '#F5F5DC')
+                .attr('stroke', '#8B4513')
+                .attr('stroke-width', 1);
         });
-        context.closePath();
-        context.fill();
-        context.stroke();
-        // 震源地を描画
+        // 震源地の座標を投影
         const [epicenterX, epicenterY] = projection([earthquakeData.longitude, earthquakeData.latitude]) || [0, 0];
-        // 震源マーク（大きな赤い円）
-        context.fillStyle = '#FF0000';
-        context.beginPath();
-        context.arc(epicenterX, epicenterY, 15, 0, 2 * Math.PI);
-        context.fill();
-        // 震源マークの輪郭
-        context.strokeStyle = '#8B0000';
-        context.lineWidth = 3;
-        context.stroke();
-        // 震源地の十字マーク
-        context.strokeStyle = '#FFFFFF';
-        context.lineWidth = 2;
-        context.beginPath();
-        context.moveTo(epicenterX - 10, epicenterY);
-        context.lineTo(epicenterX + 10, epicenterY);
-        context.moveTo(epicenterX, epicenterY - 10);
-        context.lineTo(epicenterX, epicenterY + 10);
-        context.stroke();
         // 地震の規模に応じた同心円を描画
         const magnitude = parseFloat(earthquakeData.magnitude.toString());
         if (!isNaN(magnitude)) {
-            context.strokeStyle = '#FF6666';
-            context.lineWidth = 2;
-            context.setLineDash([5, 5]);
             for (let i = 1; i <= 3; i++) {
                 const radius = 30 + (i * 20 * magnitude / 5);
-                context.beginPath();
-                context.arc(epicenterX, epicenterY, radius, 0, 2 * Math.PI);
-                context.stroke();
+                svg.append('circle')
+                    .attr('cx', epicenterX)
+                    .attr('cy', epicenterY)
+                    .attr('r', radius)
+                    .attr('fill', 'none')
+                    .attr('stroke', '#FF6666')
+                    .attr('stroke-width', 2)
+                    .attr('stroke-dasharray', '5,5')
+                    .attr('opacity', 0.7);
             }
-            context.setLineDash([]);
         }
-        // 情報テキストを描画
-        context.fillStyle = '#000000';
-        context.font = 'bold 16px Arial';
-        context.textAlign = 'left';
-        // 背景付きテキストボックス
-        const textX = 20;
-        const textY = 30;
-        const lineHeight = 25;
-        context.fillStyle = 'rgba(255, 255, 255, 0.9)';
-        context.fillRect(textX - 10, textY - 5, 300, lineHeight * 5 + 10);
-        context.fillStyle = '#000000';
-        context.fillText(`震源: ${earthquakeData.hypocenter}`, textX, textY + lineHeight);
-        context.fillText(`マグニチュード: ${earthquakeData.magnitude}`, textX, textY + lineHeight * 2);
-        context.fillText(`深さ: ${earthquakeData.depth}`, textX, textY + lineHeight * 3);
-        context.fillText(`最大震度: ${earthquakeData.maxScale}`, textX, textY + lineHeight * 4);
-        // 緯度・経度の表示
-        context.font = '12px Arial';
-        context.fillText(`震源地: ${earthquakeData.latitude.toFixed(2)}°N, ${earthquakeData.longitude.toFixed(2)}°E`, textX, textY + lineHeight * 5);
-        // CanvasをPNGバッファに変換
-        const buffer = canvas.toBuffer('image/png');
-        // 生成された画像を保存
+        // 震源マーク（大きな赤い円）
+        svg.append('circle')
+            .attr('cx', epicenterX)
+            .attr('cy', epicenterY)
+            .attr('r', 15)
+            .attr('fill', '#FF0000')
+            .attr('stroke', '#8B0000')
+            .attr('stroke-width', 3);
+        // 震源地の十字マーク
+        svg.append('g')
+            .selectAll('line')
+            .data([
+            { x1: epicenterX - 10, y1: epicenterY, x2: epicenterX + 10, y2: epicenterY },
+            { x1: epicenterX, y1: epicenterY - 10, x2: epicenterX, y2: epicenterY + 10 }
+        ])
+            .enter()
+            .append('line')
+            .attr('x1', d => d.x1)
+            .attr('y1', d => d.y1)
+            .attr('x2', d => d.x2)
+            .attr('y2', d => d.y2)
+            .attr('stroke', '#FFFFFF')
+            .attr('stroke-width', 2);
+        // 情報テキストボックス
+        const textGroup = svg.append('g');
+        // 背景
+        textGroup.append('rect')
+            .attr('x', 10)
+            .attr('y', 20)
+            .attr('width', 300)
+            .attr('height', 130)
+            .attr('fill', 'rgba(255, 255, 255, 0.9)')
+            .attr('stroke', '#000000')
+            .attr('stroke-width', 1);
+        // テキスト情報
+        const textInfo = [
+            `震源: ${earthquakeData.hypocenter}`,
+            `マグニチュード: ${earthquakeData.magnitude}`,
+            `深さ: ${earthquakeData.depth}`,
+            `最大震度: ${earthquakeData.maxScale}`,
+            `震源地: ${earthquakeData.latitude.toFixed(2)}°N, ${earthquakeData.longitude.toFixed(2)}°E`
+        ];
+        textInfo.forEach((text, index) => {
+            textGroup.append('text')
+                .attr('x', 20)
+                .attr('y', 45 + index * 20)
+                .attr('font-family', 'Arial, sans-serif')
+                .attr('font-size', index < 4 ? '14px' : '12px')
+                .attr('font-weight', index < 4 ? 'bold' : 'normal')
+                .attr('fill', '#000000')
+                .text(text);
+        });
+        // SVGをHTML文字列として取得
+        const svgHtml = dom.window.document.body.innerHTML;
+        // SVGをPNGに変換
         const timestamp = Date.now();
         const filename = `earthquake_map_${timestamp}.png`;
         const filepath = path.join(__dirname, '../../generated_images', filename);
-        yield (0, sharp_1.default)(buffer)
+        yield (0, sharp_1.default)(Buffer.from(svgHtml))
             .png()
             .toFile(filepath);
         console.log('地震マップ画像を生成しました:', filepath);
