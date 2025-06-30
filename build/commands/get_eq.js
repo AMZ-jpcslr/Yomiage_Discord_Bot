@@ -52,38 +52,69 @@ function execute(interaction) {
             const depth = (_u = (_t = (_s = (_r = (_q = detail.Body) === null || _q === void 0 ? void 0 : _q.Earthquake) === null || _r === void 0 ? void 0 : _r.Hypocenter) === null || _s === void 0 ? void 0 : _s.Area) === null || _t === void 0 ? void 0 : _t.Depth) !== null && _u !== void 0 ? _u : '不明';
             const text = (_w = (_v = detail.Head) === null || _v === void 0 ? void 0 : _v.Text) !== null && _w !== void 0 ? _w : '';
             const maxScaleStr = maxScale !== '不明' ? maxScaleToString(Number(maxScale)) : '不明';
-            // 震度画像URL（.png形式を使用）
+            // 震度画像URL（文字列形式に対応）
             let shindoImageUrl = undefined;
-            const maxScaleNum = maxScale !== '不明' ? Number(maxScale) : 0;
-            switch (maxScaleNum) {
-                case 10:
+            console.log('生の震度値:', maxScale, '型:', typeof maxScale);
+            // 震度値の変換（文字列の場合も対応）
+            switch (String(maxScale)) {
+                case '1':
                     shindoImageUrl = 'https://i.gyazo.com/4e7e465a1fadcdacb6b2d7ad77e26613.png';
                     break;
-                case 20:
+                case '2':
                     shindoImageUrl = 'https://i.gyazo.com/32a63f749d9a95b1bd4c610ac54c3639.png';
                     break;
-                case 30:
+                case '3':
                     shindoImageUrl = 'https://i.gyazo.com/af3a39eebdc321ae76eab731e60eb110.png';
                     break;
-                case 40:
-                    shindoImageUrl = 'https://i.gyazo.com/39351fbdd780e0db5a1b4b24b0dfd025.png';
+                case '4':
+                    shindoImageUrl = 'https://i.gyazo.com/39351fbdd780e0db5a1b4b0dfd025.png';
                     break;
-                case 45:
+                case '5-':
                     shindoImageUrl = 'https://i.gyazo.com/7bf28e3aff47cf4c4b8b20bcf9a33b29.png';
                     break;
-                case 50:
+                case '5+':
                     shindoImageUrl = 'https://i.gyazo.com/3cd7bab33cf0682e57ece10df2189988.png';
                     break;
-                case 55:
+                case '6-':
                     shindoImageUrl = 'https://i.gyazo.com/77c3a1e02e8fcb0239afa5e4388146be.png';
                     break;
-                case 60:
+                case '6+':
                     shindoImageUrl = 'https://i.gyazo.com/8ca22b91e82cc578dffed126f3987fbb.png';
                     break;
-                case 70:
+                case '7':
                     shindoImageUrl = 'https://i.gyazo.com/74b556e4e716116e546e0638ab9e5db4.png';
                     break;
-                default: shindoImageUrl = undefined;
+                // 数値形式の場合も対応（旧形式）
+                case '10':
+                    shindoImageUrl = 'https://i.gyazo.com/4e7e465a1fadcdacb6b2d7ad77e26613.png';
+                    break;
+                case '20':
+                    shindoImageUrl = 'https://i.gyazo.com/32a63f749d9a95b1bd4c610ac54c3639.png';
+                    break;
+                case '30':
+                    shindoImageUrl = 'https://i.gyazo.com/af3a39eebdc321ae76eab731e60eb110.png';
+                    break;
+                case '40':
+                    shindoImageUrl = 'https://i.gyazo.com/39351fbdd780e0db5a1b4b0dfd025.png';
+                    break;
+                case '45':
+                    shindoImageUrl = 'https://i.gyazo.com/7bf28e3aff47cf4c4b8b20bcf9a33b29.png';
+                    break;
+                case '50':
+                    shindoImageUrl = 'https://i.gyazo.com/3cd7bab33cf0682e57ece10df2189988.png';
+                    break;
+                case '55':
+                    shindoImageUrl = 'https://i.gyazo.com/77c3a1e02e8fcb0239afa5e4388146be.png';
+                    break;
+                case '60':
+                    shindoImageUrl = 'https://i.gyazo.com/8ca22b91e82cc578dffed126f3987fbb.png';
+                    break;
+                case '70':
+                    shindoImageUrl = 'https://i.gyazo.com/74b556e4e716116e546e0638ab9e5db4.png';
+                    break;
+                default:
+                    console.log('対応していない震度値:', maxScale);
+                    shindoImageUrl = undefined;
             }
             // 埋め込み作成（テレビ形式）
             const embed = new discord_js_1.EmbedBuilder()
