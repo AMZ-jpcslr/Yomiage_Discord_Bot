@@ -8,7 +8,9 @@ RUN apk add --no-cache \
     python3 \
     make \
     g++ \
-    libc6-compat
+    libc6-compat \
+    fontconfig \
+    ttf-dejavu
 
 # Set working directory
 WORKDIR /app
@@ -27,8 +29,8 @@ RUN mkdir -p /app/generated_maps
 
 # Set environment variables for production
 ENV NODE_ENV=production
-ENV FONTCONFIG_PATH=/dev/null
-ENV FONTCONFIG_FILE=/dev/null
+# Skip map generation if font issues persist
+ENV SKIP_MAP_GENERATION=false
 
 # Expose port (if needed for health checks)
 EXPOSE 3000

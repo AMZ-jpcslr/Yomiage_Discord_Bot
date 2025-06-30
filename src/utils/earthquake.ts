@@ -64,20 +64,27 @@ export async function createEarthquakeEmbed(latestId: string, isAutoNotify = fal
     let generatedMapPath: string | null = null
     let attachments: AttachmentBuilder[] = []
     
-    try {
-        const { earthquakeData, areaInfo } = extractEarthquakeMapData(detail)
-        generatedMapPath = await generateEarthquakeMap(earthquakeData, areaInfo)
-        
-        // 生成された画像をDiscordの添付ファイルとして準備
-        const attachment = new AttachmentBuilder(generatedMapPath, { 
-            name: 'earthquake_map.png' 
-        })
-        attachments.push(attachment)
-        console.log('独自地震マップ画像を生成しました:', generatedMapPath)
-    } catch (error) {
-        console.error('地震マップ画像生成エラー:', error)
-        console.log('地震マップなしで通知を続行します')
-        // エラーが発生してもボットの動作を継続
+    // サーバー環境では地震マップ生成をスキップするオプション
+    const skipMapGeneration = process.env.SKIP_MAP_GENERATION === 'true'
+    
+    if (!skipMapGeneration) {
+        try {
+            const { earthquakeData, areaInfo } = extractEarthquakeMapData(detail)
+            generatedMapPath = await generateEarthquakeMap(earthquakeData, areaInfo)
+            
+            // 生成された画像をDiscordの添付ファイルとして準備
+            const attachment = new AttachmentBuilder(generatedMapPath, { 
+                name: 'earthquake_map.png' 
+            })
+            attachments.push(attachment)
+            console.log('独自地震マップ画像を生成しました:', generatedMapPath)
+        } catch (error) {
+            console.error('地震マップ画像生成エラー:', error)
+            console.log('地震マップなしで通知を続行します')
+            // エラーが発生してもボットの動作を継続
+        }
+    } else {
+        console.log('地震マップ生成はスキップされました（SKIP_MAP_GENERATION=true）')
     }
 
     // 埋め込み作成
