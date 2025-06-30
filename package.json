@@ -5,6 +5,7 @@
   "scripts": {
     "test": "ts-node src/main.ts",
     "start": "node build/main.js",
+    "start:prod": "NODE_ENV=production node build/main.js",
     "compile": "tsc -p ."
   },
   "keywords": [],

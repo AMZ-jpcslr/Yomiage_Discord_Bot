@@ -12,6 +12,17 @@ import sharp from 'sharp'
 // simplify-geojson can be required normally (CommonJS)
 const simplify = require('simplify-geojson')
 
+// サーバー環境対応のための環境変数設定
+if (process.env.NODE_ENV === 'production') {
+    // Fontconfig設定を無効化
+    process.env.FONTCONFIG_PATH = '/dev/null'
+    process.env.FONTCONFIG_FILE = '/dev/null'
+    
+    // Sharp のメモリ使用量を制限
+    sharp.cache({ memory: 50 })
+    sharp.concurrency(1)
+}
+
 interface EarthquakeData {
     longitude: number
     latitude: number
@@ -69,11 +80,10 @@ export async function generateEarthquakeMap(earthquakeData: EarthquakeData, area
         console.log('Starting earthquake map generation...')
         
         // Use CommonJS-compatible dynamic import to avoid require() of ES modules
-        const d3Module = await Function('return import("d3")')()
-        const d3GeoModule = await Function('return import("d3-geo")')()
+        const d3Module = await importD3()
         
         // Create d3 object similar to earthquake-alert/map-draw
-        const d3 = Object.assign({}, d3Module, d3GeoModule)
+        const d3 = Object.assign({}, d3Module)
         
         // Load config file (earthquake-alert/map-draw compatible)
         const configPath = path.join(__dirname, '../../config/config.json')
@@ -84,7 +94,11 @@ export async function generateEarthquakeMap(earthquakeData: EarthquakeData, area
         const mapData = JSON.parse(fs.readFileSync(mapPath, 'utf8'))
         
         // Create JSDOM environment for SVG (earthquake-alert/map-draw style)
-        const document = new JSDOM('').window.document
+        const dom = new JSDOM('<!DOCTYPE html><html><body></body></html>', {
+            pretendToBeVisual: false,
+            resources: 'usable'
+        })
+        const document = dom.window.document
         
         // earthquake-alert/map-draw algorithm
         const epicenter: [number, number] = [earthquakeData.longitude, earthquakeData.latitude]
@@ -295,10 +309,26 @@ export async function generateEarthquakeMap(earthquakeData: EarthquakeData, area
         
         const filepath = path.join(outputDir, filename)
         
-        // Convert SVG to PNG
-        await sharp(Buffer.from(svgHtml))
-            .png()
+        // Convert SVG to PNG with server-safe configuration
+        try {
+            // サーバー環境での安全なSharp設定
+            await sharp(Buffer.from(svgHtml), {
+                density: 150,
+                limitInputPixels: false
+            })
+            .png({
+                compressionLevel: 6,
+                quality: 80,
+                force: true
+            })
             .toFile(filepath)
+        } catch (sharpError) {
+            console.error('Sharp conversion error:', sharpError)
+            // フォールバック: 基本的なPNG出力を試行
+            await sharp(Buffer.from(svgHtml))
+                .png()
+                .toFile(filepath)
+        }
         
         console.log('Generated earthquake map:', filepath)
         return filepath
@@ -869,4 +899,20 @@ function estimateCoordinates(prefName: string, cityName: string, stationName?: s
     }
     
     return null
+}
+
+// D3.js の動的インポート関数（サーバー環境対応）
+async function importD3() {
+    try {
+        const d3Module = await (Function('return import("d3")')() as Promise<any>)
+        const d3GeoModule = await (Function('return import("d3-geo")')() as Promise<any>)
+        
+        return {
+            ...d3Module,
+            ...d3GeoModule
+        }
+    } catch (error) {
+        console.error('D3 import error:', error)
+        throw new Error('D3ライブラリの読み込みに失敗しました')
+    }
 }

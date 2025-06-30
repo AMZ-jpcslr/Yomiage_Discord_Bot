@@ -76,6 +76,8 @@ export async function createEarthquakeEmbed(latestId: string, isAutoNotify = fal
         console.log('独自地震マップ画像を生成しました:', generatedMapPath)
     } catch (error) {
         console.error('地震マップ画像生成エラー:', error)
+        console.log('地震マップなしで通知を続行します')
+        // エラーが発生してもボットの動作を継続
     }
 
     // 埋め込み作成

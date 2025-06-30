@@ -82,6 +82,8 @@ function createEarthquakeEmbed(latestId_1) {
         }
         catch (error) {
             console.error('地震マップ画像生成エラー:', error);
+            console.log('地震マップなしで通知を続行します');
+            // エラーが発生してもボットの動作を継続
         }
         // 埋め込み作成
         const title = isAutoNotify ? '🚨 【自動通知】地震情報' : '🚨 地震情報';
