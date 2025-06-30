@@ -29,16 +29,30 @@ export async function execute(interaction: ChatInputCommandInteraction) {
             return
         }
         const latestId = list[0].json
-        const imageUrl = latestId.replace('.json', '.png')
-        const jmaImageUrl = `https://www.jma.go.jp/bosai/quake/data/${imageUrl}`
-        
         console.log('最新地震ID:', latestId)
-        console.log('生成された画像URL:', jmaImageUrl)
 
         const detailRes = await fetch(`https://www.jma.go.jp/bosai/quake/data/${latestId}`)
         const detail = await detailRes.json() as any
         
         console.log('地震詳細データ構造:', JSON.stringify(detail, null, 2).substring(0, 500) + '...')
+        
+        // 気象庁の画像URL生成（複数のパターンを試行）
+        const baseImageName = latestId.replace('.json', '')
+        const eventId = detail?.Head?.EventID
+        
+        let possibleImageUrls = [
+            // 基本パターン
+            `https://www.jma.go.jp/bosai/quake/data/${baseImageName}.png`,
+            // EventIDベース
+            eventId ? `https://www.jma.go.jp/bosai/quake/data/${eventId}.png` : null,
+            eventId ? `https://www.jma.go.jp/bosai/quake/data/map/${eventId}.png` : null,
+            eventId ? `https://www.jma.go.jp/bosai/quake/data/detail/${eventId}.png` : null,
+            // 代替の固定画像（存在しない可能性あり）
+            `https://www.jma.go.jp/bosai/forecast/img/warn_quake.png`,
+            `https://www.jma.go.jp/bosai/quake/data/quake_map.png`
+        ].filter(Boolean) as string[]
+        
+        console.log('初期画像URL一覧:', possibleImageUrls)
 
         const time = detail.Head?.ReportDateTime ?? '不明'
         const hypocenter = detail.Body?.Earthquake?.Hypocenter?.Area?.Name ?? '不明'
@@ -54,25 +68,25 @@ export async function execute(interaction: ChatInputCommandInteraction) {
         
         // 震度値の変換（文字列の場合も対応）
         switch (String(maxScale)) {
-            case '1': shindoImageUrl = 'https://i.gyazo.com/4e7e465a1fadcdacb6b2d7ad77e26613.png'; break
-            case '2': shindoImageUrl = 'https://i.gyazo.com/32a63f749d9a95b1bd4c610ac54c3639.png'; break
-            case '3': shindoImageUrl = 'https://i.gyazo.com/af3a39eebdc321ae76eab731e60eb110.png'; break
-            case '4': shindoImageUrl = 'https://i.gyazo.com/39351fbdd780e0db5a1b4b0dfd025.png'; break
-            case '5-': shindoImageUrl = 'https://i.gyazo.com/7bf28e3aff47cf4c4b8b20bcf9a33b29.png'; break
-            case '5+': shindoImageUrl = 'https://i.gyazo.com/3cd7bab33cf0682e57ece10df2189988.png'; break
-            case '6-': shindoImageUrl = 'https://i.gyazo.com/77c3a1e02e8fcb0239afa5e4388146be.png'; break
-            case '6+': shindoImageUrl = 'https://i.gyazo.com/8ca22b91e82cc578dffed126f3987fbb.png'; break
-            case '7': shindoImageUrl = 'https://i.gyazo.com/74b556e4e716116e546e0638ab9e5db4.png'; break
+            case '1': shindoImageUrl = 'https://gyazo.com/4e7e465a1fadcdacb6b2d7ad77e26613/max_size/1000'; break
+            case '2': shindoImageUrl = 'https://i.gyazo.com/32a63f749d9a95b1bd4c610ac54c3639/max_size/1000'; break
+            case '3': shindoImageUrl = 'https://i.gyazo.com/af3a39eebdc321ae76eab731e60eb110/max_size/1000'; break
+            case '4': shindoImageUrl = 'https://i.gyazo.com/39351fbdd780e0db5a1b4b0dfd025/max_size/1000'; break
+            case '5-': shindoImageUrl = 'https://i.gyazo.com/7bf28e3aff47cf4c4b8b20bcf9a33b29/max_size/1000'; break
+            case '5+': shindoImageUrl = 'https://i.gyazo.com/3cd7bab33cf0682e57ece10df2189988/max_size/1000'; break
+            case '6-': shindoImageUrl = 'https://i.gyazo.com/77c3a1e02e8fcb0239afa5e4388146be/max_size/1000'; break
+            case '6+': shindoImageUrl = 'https://i.gyazo.com/8ca22b91e82cc578dffed126f3987fbb/max_size/1000'; break
+            case '7': shindoImageUrl = 'https://i.gyazo.com/74b556e4e716116e546e0638ab9e5db4/max_size/1000'; break
             // 数値形式の場合も対応（旧形式）
-            case '10': shindoImageUrl = 'https://i.gyazo.com/4e7e465a1fadcdacb6b2d7ad77e26613.png'; break
-            case '20': shindoImageUrl = 'https://i.gyazo.com/32a63f749d9a95b1bd4c610ac54c3639.png'; break
-            case '30': shindoImageUrl = 'https://i.gyazo.com/af3a39eebdc321ae76eab731e60eb110.png'; break
-            case '40': shindoImageUrl = 'https://i.gyazo.com/39351fbdd780e0db5a1b4b0dfd025.png'; break
-            case '45': shindoImageUrl = 'https://i.gyazo.com/7bf28e3aff47cf4c4b8b20bcf9a33b29.png'; break
-            case '50': shindoImageUrl = 'https://i.gyazo.com/3cd7bab33cf0682e57ece10df2189988.png'; break
-            case '55': shindoImageUrl = 'https://i.gyazo.com/77c3a1e02e8fcb0239afa5e4388146be.png'; break
-            case '60': shindoImageUrl = 'https://i.gyazo.com/8ca22b91e82cc578dffed126f3987fbb.png'; break
-            case '70': shindoImageUrl = 'https://i.gyazo.com/74b556e4e716116e546e0638ab9e5db4.png'; break
+            case '10': shindoImageUrl = 'https://gyazo.com/4e7e465a1fadcdacb6b2d7ad77e26613/max_size/1000'; break
+            case '20': shindoImageUrl = 'https://i.gyazo.com/32a63f749d9a95b1bd4c610ac54c3639/max_size/1000'; break
+            case '30': shindoImageUrl = 'https://i.gyazo.com/af3a39eebdc321ae76eab731e60eb110/max_size/1000'; break
+            case '40': shindoImageUrl = 'https://i.gyazo.com/39351fbdd780e0db5a1b4b0dfd025/max_size/1000'; break
+            case '45': shindoImageUrl = 'https://i.gyazo.com/7bf28e3aff47cf4c4b8b20bcf9a33b29/max_size/1000'; break
+            case '50': shindoImageUrl = 'https://i.gyazo.com/3cd7bab33cf0682e57ece10df2189988/max_size/1000'; break
+            case '55': shindoImageUrl = 'https://i.gyazo.com/77c3a1e02e8fcb0239afa5e4388146be/max_size/1000'; break
+            case '60': shindoImageUrl = 'https://i.gyazo.com/8ca22b91e82cc578dffed126f3987fbb/max_size/1000'; break
+            case '70': shindoImageUrl = 'https://i.gyazo.com/74b556e4e716116e546e0638ab9e5db4/max_size/1000'; break
             default: 
                 console.log('対応していない震度値:', maxScale)
                 shindoImageUrl = undefined
@@ -95,7 +109,13 @@ export async function execute(interaction: ChatInputCommandInteraction) {
 
         console.log('震度値:', maxScale, '型:', typeof maxScale)
         console.log('震度画像URL:', shindoImageUrl)
-        console.log('気象庁画像URL:', jmaImageUrl)
+
+        // 震度画像をプレースホルダーとして追加
+        if (shindoImageUrl) {
+            possibleImageUrls.push(shindoImageUrl)
+        }
+        
+        console.log('最終的な試行画像URL一覧:', possibleImageUrls)
 
         // 震度画像を右上サムネイルに設定
         if (shindoImageUrl) {
@@ -105,32 +125,35 @@ export async function execute(interaction: ChatInputCommandInteraction) {
             console.log('震度画像URLが設定されていません')
         }
 
-        // 気象庁の震度分布画像をメイン画像に設定
-        console.log('気象庁画像URL確認中:', jmaImageUrl)
+        // 気象庁の震度分布画像をメイン画像に設定（複数URL試行）
+        let validImageUrl: string | null = null
         
-        // 画像URLの存在確認
-        try {
-            const imageCheckResponse = await fetch(jmaImageUrl, { method: 'HEAD' })
-            console.log('画像URL確認結果:', imageCheckResponse.status)
-            
-            if (imageCheckResponse.ok) {
-                embed.setImage(jmaImageUrl)
-                console.log('メイン画像設定完了:', jmaImageUrl)
-            } else {
-                console.log('気象庁画像が見つかりません。代替手段を試行中...')
+        for (const url of possibleImageUrls) {
+            if (!url) continue // null チェック
+            console.log('画像URL確認中:', url)
+            try {
+                const imageCheckResponse = await fetch(url, { method: 'HEAD' })
+                console.log('画像URL確認結果:', imageCheckResponse.status)
                 
-                // 代替として震度分布図のリンクを表示
-                embed.addFields({ 
-                    name: '震度分布図', 
-                    value: `[気象庁の震度分布図を確認](https://www.jma.go.jp/bosai/forecast/#area_type=offices&area_code=011000)`, 
-                    inline: false 
-                })
+                if (imageCheckResponse.ok) {
+                    validImageUrl = url
+                    console.log('有効な画像URLを発見:', url)
+                    break
+                }
+            } catch (error) {
+                console.log('画像URL確認エラー:', url, error)
             }
-        } catch (error) {
-            console.log('画像URL確認エラー:', error)
+        }
+        
+        if (validImageUrl) {
+            embed.setImage(validImageUrl)
+            console.log('メイン画像設定完了:', validImageUrl)
+        } else {
+            console.log('有効な気象庁画像が見つかりません。代替リンクを表示')
+            // 代替として震度分布図のリンクを表示
             embed.addFields({ 
                 name: '震度分布図', 
-                value: `[気象庁の震度分布図を確認](https://www.jma.go.jp/bosai/forecast/#area_type=offices&area_code=011000)`, 
+                value: `[気象庁の地震情報を確認](https://www.jma.go.jp/bosai/earthquake/)`, 
                 inline: false 
             })
         }
