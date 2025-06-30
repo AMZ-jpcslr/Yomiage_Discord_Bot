@@ -101,14 +101,6 @@ function createEarthquakeEmbed(latestId_1) {
             embed.setImage('attachment://earthquake_map.png');
             console.log('生成された地震マップをメイン画像に設定');
         }
-        else {
-            // 代替として震度分布図のリンクを表示
-            embed.addFields({
-                name: '震度分布図',
-                value: `[気象庁の地震情報を確認](https://www.jma.go.jp/bosai/earthquake/)`,
-                inline: false
-            });
-        }
         // フッター設定
         embed.setFooter({
             text: 'Earthquake Information by JMA',

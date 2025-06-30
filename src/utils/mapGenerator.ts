@@ -3,208 +3,269 @@ import * as path from 'path'
 import { JSDOM } from 'jsdom'
 import sharp from 'sharp'
 
-// 日本地図のGeoJSONデータ（簡略化）
-const japanGeoJSON = {
-    "type": "FeatureCollection",
-    "features": [
-        {
-            "type": "Feature",
-            "properties": {"name": "Japan"},
-            "geometry": {
-                "type": "Polygon",
-                "coordinates": [[
-                    [129.0, 30.0], [146.0, 30.0], [146.0, 46.0], [129.0, 46.0], [129.0, 30.0]
-                ]]
-            }
-        }
-    ]
-}
+// simplify-geojson can be required normally
+const simplify = require('simplify-geojson')
 
 interface EarthquakeData {
     longitude: number
     latitude: number
-    magnitude: number
-    depth: number
+    magnitude: number | string
+    depth: number | string
     hypocenter: string
     maxScale: string
 }
 
-export async function generateEarthquakeMap(earthquakeData: EarthquakeData): Promise<string> {
-    // D3.jsを動的にインポート
-    const d3 = await import('d3')
-    
-    const width = 800
-    const height = 600
-    const center: [number, number] = [139.69, 35.68] // 東京を中心
-    const scale = 4000
-    
-    // JSDOMでSVG環境を作成
-    const dom = new JSDOM(`<!DOCTYPE html><html><body></body></html>`)
-    global.document = dom.window.document
-    global.window = dom.window as any
-    
-    // 地図投影の設定
-    const projection = d3.geoMercator()
-        .center(center)
-        .translate([width / 2, height / 2])
-        .scale(scale)
-    
-    const geoPath = d3.geoPath()
-        .projection(projection)
-    
-    // SVG要素を作成
-    const svg = d3.select(dom.window.document.body)
-        .append('svg')
-        .attr('width', width)
-        .attr('height', height)
-        .attr('xmlns', 'http://www.w3.org/2000/svg')
-    
-    // 背景（海）
-    svg.append('rect')
-        .attr('width', width)
-        .attr('height', height)
-        .attr('fill', '#4A90E2')
-    
-    // 日本列島の基本形状を描画
-    const japanOutline: [number, number][] = [
-        // 本州の大まかな輪郭
-        [138.5, 35.0], [139.0, 35.5], [140.0, 36.0], [141.0, 37.0],
-        [141.5, 38.0], [141.0, 39.0], [140.5, 40.0], [140.0, 41.0],
-        [139.5, 41.5], [138.5, 41.0], [137.5, 40.0], [136.5, 39.0],
-        [135.5, 38.0], [134.5, 37.0], [133.5, 36.0], [132.5, 35.0],
-        [133.0, 34.5], [134.0, 34.0], [135.0, 34.0], [136.0, 34.5],
-        [137.0, 34.8], [138.0, 35.0], [138.5, 35.0]
-    ]
-    
-    // 日本の輪郭を描画
-    const lineFunction = d3.line()
-        .x(d => projection(d)?.[0] || 0)
-        .y(d => projection(d)?.[1] || 0)
-        .curve(d3.curveLinear)
-    
-    svg.append('path')
-        .datum(japanOutline)
-        .attr('d', lineFunction)
-        .attr('fill', '#F5F5DC')
-        .attr('stroke', '#8B4513')
-        .attr('stroke-width', 1)
-    
-    // 四国、九州、北海道の簡略的な描画
-    const shikoku: [number, number][] = [
-        [133.0, 33.5], [134.5, 33.0], [134.8, 34.2], [132.8, 34.0], [133.0, 33.5]
-    ]
-    
-    const kyushu: [number, number][] = [
-        [129.5, 31.0], [131.5, 31.0], [131.8, 33.5], [129.8, 33.8], [129.5, 31.0]
-    ]
-    
-    const hokkaido: [number, number][] = [
-        [139.5, 41.5], [146.0, 42.0], [146.0, 45.5], [140.0, 45.8], [139.5, 41.5]
-    ]
-    
-    // 追加の島々を描画
-    const islands = [shikoku, kyushu, hokkaido]
-    islands.forEach((island: [number, number][]) => {
-        svg.append('path')
-            .datum(island)
-            .attr('d', lineFunction)
-            .attr('fill', '#F5F5DC')
-            .attr('stroke', '#8B4513')
-            .attr('stroke-width', 1)
-    })
-    
-    // 震源地の座標を投影
-    const [epicenterX, epicenterY] = projection([earthquakeData.longitude, earthquakeData.latitude]) || [0, 0]
-    
-    // 地震の規模に応じた同心円を描画
-    const magnitude = parseFloat(earthquakeData.magnitude.toString())
-    if (!isNaN(magnitude)) {
-        for (let i = 1; i <= 3; i++) {
-            const radius = 30 + (i * 20 * magnitude / 5)
-            svg.append('circle')
-                .attr('cx', epicenterX)
-                .attr('cy', epicenterY)
-                .attr('r', radius)
-                .attr('fill', 'none')
-                .attr('stroke', '#FF6666')
-                .attr('stroke-width', 2)
-                .attr('stroke-dasharray', '5,5')
-                .attr('opacity', 0.7)
-        }
+// earthquake-alert/map-draw compatible interface
+interface MapConfig {
+    width: number
+    height: number
+    scale: number
+    resolution: number
+    stroke_width: number
+    sea_color: string
+    land_color: string
+    stroke_color: string
+    map: string
+    seismic_intensity_color: {
+        [key: string]: string
     }
-    
-    // 震源マーク（大きな赤い円）
-    svg.append('circle')
-        .attr('cx', epicenterX)
-        .attr('cy', epicenterY)
-        .attr('r', 15)
-        .attr('fill', '#FF0000')
-        .attr('stroke', '#8B0000')
-        .attr('stroke-width', 3)
-    
-    // 震源地の十字マーク
-    svg.append('g')
-        .selectAll('line')
-        .data([
-            { x1: epicenterX - 10, y1: epicenterY, x2: epicenterX + 10, y2: epicenterY },
-            { x1: epicenterX, y1: epicenterY - 10, x2: epicenterX, y2: epicenterY + 10 }
-        ])
-        .enter()
-        .append('line')
-        .attr('x1', d => d.x1)
-        .attr('y1', d => d.y1)
-        .attr('x2', d => d.x2)
-        .attr('y2', d => d.y2)
-        .attr('stroke', '#FFFFFF')
-        .attr('stroke-width', 2)
-    
-    // 情報テキストボックス
-    const textGroup = svg.append('g')
-    
-    // 背景
-    textGroup.append('rect')
-        .attr('x', 10)
-        .attr('y', 20)
-        .attr('width', 300)
-        .attr('height', 130)
-        .attr('fill', 'rgba(255, 255, 255, 0.9)')
-        .attr('stroke', '#000000')
-        .attr('stroke-width', 1)
-    
-    // テキスト情報
-    const textInfo = [
-        `震源: ${earthquakeData.hypocenter}`,
-        `マグニチュード: ${earthquakeData.magnitude}`,
-        `深さ: ${earthquakeData.depth}`,
-        `最大震度: ${earthquakeData.maxScale}`,
-        `震源地: ${earthquakeData.latitude.toFixed(2)}°N, ${earthquakeData.longitude.toFixed(2)}°E`
-    ]
-    
-    textInfo.forEach((text, index) => {
-        textGroup.append('text')
-            .attr('x', 20)
-            .attr('y', 45 + index * 20)
-            .attr('font-family', 'Arial, sans-serif')
-            .attr('font-size', index < 4 ? '14px' : '12px')
-            .attr('font-weight', index < 4 ? 'bold' : 'normal')
-            .attr('fill', '#000000')
-            .text(text)
-    })
-    
-    // SVGをHTML文字列として取得
-    const svgHtml = dom.window.document.body.innerHTML
-    
-    // SVGをPNGに変換
-    const timestamp = Date.now()
-    const filename = `earthquake_map_${timestamp}.png`
-    const filepath = path.join(__dirname, '../../generated_images', filename)
-    
-    await sharp(Buffer.from(svgHtml))
-        .png()
-        .toFile(filepath)
-    
-    console.log('地震マップ画像を生成しました:', filepath)
-    return filepath
+    epicenter: {
+        color: string
+        stroke: string
+        size: number
+        width: number
+        stroke_width: number
+    }
+    seismic_intensity: {
+        circle: number
+        fontsize: number
+        height: number
+        width: number
+        font: string
+    }
+    copyright: {
+        text: string[]
+        size: number
+        color: string
+        font: string
+    }
+}
+
+export async function generateEarthquakeMap(earthquakeData: EarthquakeData): Promise<string> {
+    try {
+        console.log('Starting earthquake map generation...')
+        
+        // Use eval to prevent TypeScript from converting to require()
+        const importD3 = new Function('specifier', 'return import(specifier)')
+        const d3Module = await importD3('d3')
+        const d3GeoModule = await importD3('d3-geo')
+        
+        // Handle both default and named exports
+        const d3 = d3Module.default || d3Module
+        const d3Geo = d3GeoModule.default || d3GeoModule
+        
+        // Load config file (earthquake-alert/map-draw compatible)
+        const configPath = path.join(__dirname, '../../config/config.json')
+        const config: MapConfig = JSON.parse(fs.readFileSync(configPath, 'utf8'))
+        
+        // Load map data
+        const mapPath = path.join(__dirname, '../../', config.map)
+        const mapData = JSON.parse(fs.readFileSync(mapPath, 'utf8'))
+        
+        // Create JSDOM environment for SVG
+        const dom = new JSDOM('')
+        const document = dom.window.document
+        
+        // earthquake-alert/map-draw algorithm
+        const epicenter: [number, number] = [earthquakeData.longitude, earthquakeData.latitude]
+        
+        // Default areas (just the epicenter for now)
+        const area_info = {
+            epicenter: epicenter,
+            areas: {}
+        }
+        
+        // Calculate longitude and latitude bounds (map-draw style)
+        let longitude = [epicenter[0], epicenter[0]]
+        let latitude = [epicenter[1], epicenter[1]]
+        let volume = 1
+        
+        let sum_longitude = epicenter[0]
+        let sum_latitude = epicenter[1]
+        
+        for (const area_key in area_info.areas) {
+            for (const element of (area_info.areas as any)[area_key]) {
+                sum_longitude += element[0]
+                sum_latitude += element[1]
+                longitude = [Math.max(longitude[0], element[0]), Math.min(longitude[1], element[0])]
+                latitude = [Math.max(latitude[0], element[1]), Math.min(latitude[1], element[1])]
+                volume++
+            }
+        }
+        
+        const center: [number, number] = [sum_longitude / volume, sum_latitude / volume]
+        const expansion_rate = longitude[0] - longitude[1] + latitude[0] - latitude[1]
+        
+        // Scale calculation (earthquake-alert/map-draw style)
+        let _scale: number
+        if (expansion_rate === 0) {
+            _scale = 1
+        } else if (expansion_rate < 1) {
+            _scale = 3
+        } else if (expansion_rate < 3) {
+            _scale = 1.75
+        } else if (expansion_rate < 5) {
+            _scale = 1.4
+        } else if (expansion_rate < 7) {
+            _scale = 1.2
+        } else if (expansion_rate < 9) {
+            _scale = 1.2
+        } else {
+            _scale = 1
+        }
+        
+        // Simplify geojson data
+        const data = simplify(mapData, config.resolution)
+        
+        // Setup map projection (earthquake-alert/map-draw style)
+        const aProjection = d3Geo.geoMercator()
+            .center(center)
+            .translate([config.width / 2, config.height / 2])
+            .scale(config.scale * _scale)
+        
+        const geoPath = d3Geo.geoPath()
+            .projection(aProjection)
+        
+        // Create SVG (earthquake-alert/map-draw style)
+        const svg = d3.select(document.body)
+            .append('svg')
+            .attr('xmlns', 'http://www.w3.org/2000/svg')
+            .attr('width', config.width)
+            .attr('height', config.height)
+            .attr('scale', aProjection.scale())
+            .attr('encoding', 'utf-8')
+            .style('background-color', config.sea_color)
+        
+        // Draw map (earthquake-alert/map-draw style)
+        svg.append('path')
+            .datum(data)
+            .attr('d', geoPath)
+            .attr('stroke-width', config.stroke_width)
+            .attr('stroke-linejoin', 'round')
+            .attr('stroke-linecap', 'round')
+            .style('fill', config.land_color)
+            .style('stroke', config.stroke_color)
+        
+        // Draw epicenter (earthquake-alert/map-draw style)
+        const epicenterCoord = aProjection(epicenter)
+        if (!epicenterCoord) {
+            throw new Error('Failed to project epicenter coordinates')
+        }
+        
+        // Epicenter X mark background
+        svg.append('line')
+            .attr('x1', epicenterCoord[0] - config.epicenter.size - config.epicenter.stroke_width)
+            .attr('x2', epicenterCoord[0] + config.epicenter.size + config.epicenter.stroke_width)
+            .attr('y1', epicenterCoord[1] - config.epicenter.size - config.epicenter.stroke_width)
+            .attr('y2', epicenterCoord[1] + config.epicenter.size + config.epicenter.stroke_width)
+            .attr('stroke-width', config.epicenter.width + config.epicenter.stroke_width * 2)
+            .style('stroke', config.epicenter.stroke)
+        
+        svg.append('line')
+            .attr('x1', epicenterCoord[0] - config.epicenter.size - config.epicenter.stroke_width)
+            .attr('x2', epicenterCoord[0] + config.epicenter.size + config.epicenter.stroke_width)
+            .attr('y1', epicenterCoord[1] + config.epicenter.size + config.epicenter.stroke_width)
+            .attr('y2', epicenterCoord[1] - config.epicenter.size - config.epicenter.stroke_width)
+            .attr('stroke-width', config.epicenter.width + config.epicenter.stroke_width * 2)
+            .style('stroke', config.epicenter.stroke)
+        
+        // Epicenter X mark foreground
+        svg.append('line')
+            .attr('x1', epicenterCoord[0] - config.epicenter.size)
+            .attr('x2', epicenterCoord[0] + config.epicenter.size)
+            .attr('y1', epicenterCoord[1] - config.epicenter.size)
+            .attr('y2', epicenterCoord[1] + config.epicenter.size)
+            .attr('stroke-width', config.epicenter.width)
+            .style('stroke', config.epicenter.color)
+        
+        svg.append('line')
+            .attr('x1', epicenterCoord[0] - config.epicenter.size)
+            .attr('x2', epicenterCoord[0] + config.epicenter.size)
+            .attr('y1', epicenterCoord[1] + config.epicenter.size)
+            .attr('y2', epicenterCoord[1] - config.epicenter.size)
+            .attr('stroke-width', config.epicenter.width)
+            .style('stroke', config.epicenter.color)
+        
+        // Add earthquake information text overlay
+        const textGroup = svg.append('g')
+        
+        // Background rectangle for text
+        textGroup.append('rect')
+            .attr('x', 10)
+            .attr('y', 20)
+            .attr('width', 380)
+            .attr('height', 140)
+            .attr('fill', 'rgba(255, 255, 255, 0.95)')
+            .attr('stroke', '#333333')
+            .attr('stroke-width', 2)
+            .attr('rx', 5)
+        
+        // Add text information
+        const textInfo = [
+            `震源: ${earthquakeData.hypocenter}`,
+            `マグニチュード: ${earthquakeData.magnitude}`,
+            `深さ: ${earthquakeData.depth}`,
+            `最大震度: ${earthquakeData.maxScale}`,
+            `座標: ${earthquakeData.latitude.toFixed(2)}°N, ${earthquakeData.longitude.toFixed(2)}°E`
+        ]
+        
+        textInfo.forEach((text, index) => {
+            textGroup.append('text')
+                .attr('x', 20)
+                .attr('y', 45 + index * 22)
+                .attr('font-family', config.seismic_intensity.font || 'Arial')
+                .attr('font-size', index < 4 ? '18px' : '16px')
+                .attr('font-weight', 'bold')
+                .attr('fill', '#333333')
+                .text(text)
+        })
+        
+        // Add copyright (earthquake-alert/map-draw style)
+        svg.append('text')
+            .text(config.copyright.text.join(' / '))
+            .attr('x', 10)
+            .attr('y', config.height - config.copyright.size)
+            .attr('font-size', config.copyright.size)
+            .attr('font-family', config.copyright.font)
+            .style('fill', config.copyright.color)
+        
+        // Get SVG as HTML string
+        const svgHtml = document.body.innerHTML
+        
+        // Convert SVG to PNG using Sharp
+        const timestamp = Date.now()
+        const filename = `earthquake_map_${timestamp}.png`
+        const outputDir = path.join(__dirname, '../../generated_images')
+        
+        // Ensure output directory exists
+        if (!fs.existsSync(outputDir)) {
+            fs.mkdirSync(outputDir, { recursive: true })
+        }
+        
+        const filepath = path.join(outputDir, filename)
+        
+        // Convert SVG to PNG
+        await sharp(Buffer.from(svgHtml))
+            .png()
+            .toFile(filepath)
+        
+        console.log('Generated earthquake map:', filepath)
+        return filepath
+        
+    } catch (error) {
+        console.error('Error generating earthquake map:', error)
+        throw error
+    }
 }
 
 // 地震データから画像生成用のデータを抽出

@@ -1,0 +1,43 @@
+{
+    "width": 1920,
+    "height": 1080,
+    "scale": 15000,
+    "resolution": 0.02,
+    "stroke_width": 1,
+    "sea_color": "#1a1a1a",
+    "land_color": "#595959",
+    "stroke_color": "#ffffff",
+    "map": "data/maps/japan.geojson",
+    "seismic_intensity_color": {
+        "0": "#d9d9d9",
+        "1": "#2d1fcc",
+        "2": "#3b93db",
+        "3": "#67e071",
+        "4": "#e2eb38",
+        "under_5": "#e38227",
+        "over_5": "#e38227",
+        "under_6": "#e81c2d",
+        "over_6": "#e81c2d",
+        "7": "#db1d95"
+    },
+    "epicenter": {
+        "color": "#d10026",
+        "stroke": "#ffffff",
+        "size": 20,
+        "width": 4,
+        "stroke_width": 2
+    },
+    "seismic_intensity": {
+        "circle": 12,
+        "fontsize": 16,
+        "height": 5,
+        "width": 0,
+        "font": "Arial"
+    },
+    "copyright": {
+        "text": ["Earthquake Information by JMA", "Map Data: Geographical Survey Institute"],
+        "size": 14,
+        "color": "#c9c9c9",
+        "font": "Arial"
+    }
+}
