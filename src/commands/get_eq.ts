@@ -1,4 +1,4 @@
-import { SlashCommandBuilder, ChatInputCommandInteraction, EmbedBuilder } from 'discord.js'
+import { SlashCommandBuilder, ChatInputCommandInteraction, EmbedBuilder, AttachmentBuilder } from 'discord.js'
 
 export const data = new SlashCommandBuilder()
     .setName('get_eq')
@@ -61,7 +61,7 @@ export async function execute(interaction: ChatInputCommandInteraction) {
         // 埋め込み作成（テレビ形式）
         const embed = new EmbedBuilder()
             .setTitle('🚨 地震情報')
-            .setColor(0x0099ff) // 青色
+            .setColor(0xff4444) // 赤色に変更（地震警報らしく）
             .setDescription(
                 `**${time.replace(/T/, ' ').replace(/\+09:00/, '')}ごろ、**\n` +
                 `**最大震度${maxScaleStr}の地震がありました。**\n` +
@@ -73,15 +73,34 @@ export async function execute(interaction: ChatInputCommandInteraction) {
                 { name: '深さ', value: `${depth}`, inline: true }
             )
 
-        // 最大震度の画像を右上サムネイルに
+        const attachments: AttachmentBuilder[] = []
+
+        // 震度画像をダウンロードして添付
         if (shindoImageUrl) {
-            embed.setThumbnail(shindoImageUrl)
+            try {
+                const shindoResponse = await fetch(shindoImageUrl)
+                if (shindoResponse.ok) {
+                    const shindoBuffer = Buffer.from(await shindoResponse.arrayBuffer())
+                    const shindoAttachment = new AttachmentBuilder(shindoBuffer, { name: `shindo_${maxScale}.png` })
+                    attachments.push(shindoAttachment)
+                    embed.setThumbnail(`attachment://shindo_${maxScale}.png`)
+                }
+            } catch (error) {
+                console.log('震度画像の取得に失敗:', error)
+            }
         }
 
-        // 震度分布画像（気象庁公式）をメイン画像に
-        const response = await fetch(jmaImageUrl)
-        if (response.ok) {
-            embed.setImage(jmaImageUrl)
+        // 震度分布画像をダウンロードして添付
+        try {
+            const mapResponse = await fetch(jmaImageUrl)
+            if (mapResponse.ok) {
+                const mapBuffer = Buffer.from(await mapResponse.arrayBuffer())
+                const mapAttachment = new AttachmentBuilder(mapBuffer, { name: 'earthquake_map.png' })
+                attachments.push(mapAttachment)
+                embed.setImage('attachment://earthquake_map.png')
+            }
+        } catch (error) {
+            console.log('地震マップの取得に失敗:', error)
         }
 
         // フッターに出典と時刻
@@ -91,7 +110,7 @@ export async function execute(interaction: ChatInputCommandInteraction) {
         })
         embed.setTimestamp(new Date())
 
-        await interaction.editReply({ embeds: [embed] })
+        await interaction.editReply({ embeds: [embed], files: attachments })
     } catch (e) {
         console.error(e)
         await interaction.editReply('地震情報の取得中にエラーが発生しました。')

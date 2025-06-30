@@ -87,19 +87,39 @@ function execute(interaction) {
             // 埋め込み作成（テレビ形式）
             const embed = new discord_js_1.EmbedBuilder()
                 .setTitle('🚨 地震情報')
-                .setColor(0x0099ff) // 青色
+                .setColor(0xff4444) // 赤色に変更（地震警報らしく）
                 .setDescription(`**${time.replace(/T/, ' ').replace(/\+09:00/, '')}ごろ、**\n` +
                 `**最大震度${maxScaleStr}の地震がありました。**\n` +
                 `${text ? text + '\n' : ''}`)
                 .addFields({ name: '震源', value: hypocenter, inline: true }, { name: '規模', value: `M${magnitude}`, inline: true }, { name: '深さ', value: `${depth}`, inline: true });
-            // 最大震度の画像を右上サムネイルに
+            const attachments = [];
+            // 震度画像をダウンロードして添付
             if (shindoImageUrl) {
-                embed.setThumbnail(shindoImageUrl);
+                try {
+                    const shindoResponse = yield fetch(shindoImageUrl);
+                    if (shindoResponse.ok) {
+                        const shindoBuffer = Buffer.from(yield shindoResponse.arrayBuffer());
+                        const shindoAttachment = new discord_js_1.AttachmentBuilder(shindoBuffer, { name: `shindo_${maxScale}.png` });
+                        attachments.push(shindoAttachment);
+                        embed.setThumbnail(`attachment://shindo_${maxScale}.png`);
+                    }
+                }
+                catch (error) {
+                    console.log('震度画像の取得に失敗:', error);
+                }
             }
-            // 震度分布画像（気象庁公式）をメイン画像に
-            const response = yield fetch(jmaImageUrl);
-            if (response.ok) {
-                embed.setImage(jmaImageUrl);
+            // 震度分布画像をダウンロードして添付
+            try {
+                const mapResponse = yield fetch(jmaImageUrl);
+                if (mapResponse.ok) {
+                    const mapBuffer = Buffer.from(yield mapResponse.arrayBuffer());
+                    const mapAttachment = new discord_js_1.AttachmentBuilder(mapBuffer, { name: 'earthquake_map.png' });
+                    attachments.push(mapAttachment);
+                    embed.setImage('attachment://earthquake_map.png');
+                }
+            }
+            catch (error) {
+                console.log('地震マップの取得に失敗:', error);
             }
             // フッターに出典と時刻
             embed.setFooter({
@@ -107,7 +127,7 @@ function execute(interaction) {
                 iconURL: 'https://www.jma.go.jp/jma/kishou/favicon.ico'
             });
             embed.setTimestamp(new Date());
-            yield interaction.editReply({ embeds: [embed] });
+            yield interaction.editReply({ embeds: [embed], files: attachments });
         }
         catch (e) {
             console.error(e);
