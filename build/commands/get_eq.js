@@ -56,31 +56,31 @@ function execute(interaction) {
             let shindoImageUrl = undefined;
             switch (maxScale) {
                 case 10:
-                    shindoImageUrl = 'https://raw.githubusercontent.com/AMZ-jpcslr/Discord_Bot/refs/heads/master/nc300018.jpg?token=GHSAT0AAAAAADGG2T7ANXQR6SRXJKIUTDQ62DCVRBQ';
+                    shindoImageUrl = 'https://gyazo.com/4e7e465a1fadcdacb6b2d7ad77e26613';
                     break;
                 case 20:
-                    shindoImageUrl = 'https://raw.githubusercontent.com/AMZ-jpcslr/Discord_Bot/refs/heads/master/nc300017.jpg?token=GHSAT0AAAAAADGG2T7ABGGNE7PURHBWO7N22DCVRMA';
+                    shindoImageUrl = 'https://gyazo.com/32a63f749d9a95b1bd4c610ac54c3639';
                     break;
                 case 30:
-                    shindoImageUrl = 'https://raw.githubusercontent.com/AMZ-jpcslr/Discord_Bot/refs/heads/master/nc300015.jpg?token=GHSAT0AAAAAADGG2T7BGJGHXRXF2NPM7QGM2DCVRTA';
+                    shindoImageUrl = 'https://gyazo.com/af3a39eebdc321ae76eab731e60eb110';
                     break;
                 case 40:
-                    shindoImageUrl = 'https://raw.githubusercontent.com/AMZ-jpcslr/Discord_Bot/refs/heads/master/nc300014.jpg?token=GHSAT0AAAAAADGG2T7AYHOQV3DSPQJVTHEI2DCVRYA';
+                    shindoImageUrl = 'https://gyazo.com/39351fbdd780e0db5a1b4b24b0dfd025';
                     break;
                 case 45:
-                    shindoImageUrl = 'https://raw.githubusercontent.com/AMZ-jpcslr/Discord_Bot/refs/heads/master/nc300013.jpg?token=GHSAT0AAAAAADGG2T7BCGAFRP6G7WWO4QJE2DCVR5Q';
+                    shindoImageUrl = 'https://gyazo.com/7bf28e3aff47cf4c4b8b20bcf9a33b29';
                     break;
                 case 50:
-                    shindoImageUrl = 'https://raw.githubusercontent.com/AMZ-jpcslr/Discord_Bot/refs/heads/master/nc300012.jpg?token=GHSAT0AAAAAADGG2T7ARIE3GAFKN3WKEW7Q2DCVSCQ';
+                    shindoImageUrl = 'https://gyazo.com/3cd7bab33cf0682e57ece10df2189988';
                     break;
                 case 55:
-                    shindoImageUrl = 'https://raw.githubusercontent.com/AMZ-jpcslr/Discord_Bot/refs/heads/master/nc300011.jpg?token=GHSAT0AAAAAADGG2T7AHK5SONZC2LCATADQ2DCVSIQ';
+                    shindoImageUrl = 'https://gyazo.com/77c3a1e02e8fcb0239afa5e4388146be';
                     break;
                 case 60:
-                    shindoImageUrl = 'https://raw.githubusercontent.com/AMZ-jpcslr/Discord_Bot/refs/heads/master/nc300010.jpg?token=GHSAT0AAAAAADGG2T7BW2EDUOE5JTYUSIRK2DCVSPQ';
+                    shindoImageUrl = 'https://gyazo.com/8ca22b91e82cc578dffed126f3987fbb';
                     break;
                 case 70:
-                    shindoImageUrl = 'https://raw.githubusercontent.com/AMZ-jpcslr/Discord_Bot/refs/heads/master/nc300009.jpg?token=GHSAT0AAAAAADGG2T7BE45YPOH6PMH45LNC2DCVSUA';
+                    shindoImageUrl = 'https://gyazo.com/74b556e4e716116e546e0638ab9e5db4';
                     break;
                 default: shindoImageUrl = undefined;
             }
