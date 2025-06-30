@@ -31,9 +31,14 @@ export async function execute(interaction: ChatInputCommandInteraction) {
         const latestId = list[0].json
         const imageUrl = latestId.replace('.json', '.png')
         const jmaImageUrl = `https://www.jma.go.jp/bosai/quake/data/${imageUrl}`
+        
+        console.log('最新地震ID:', latestId)
+        console.log('生成された画像URL:', jmaImageUrl)
 
         const detailRes = await fetch(`https://www.jma.go.jp/bosai/quake/data/${latestId}`)
         const detail = await detailRes.json() as any
+        
+        console.log('地震詳細データ構造:', JSON.stringify(detail, null, 2).substring(0, 500) + '...')
 
         const time = detail.Head?.ReportDateTime ?? '不明'
         const hypocenter = detail.Body?.Earthquake?.Hypocenter?.Area?.Name ?? '不明'
@@ -101,8 +106,34 @@ export async function execute(interaction: ChatInputCommandInteraction) {
         }
 
         // 気象庁の震度分布画像をメイン画像に設定
-        embed.setImage(jmaImageUrl)
-        console.log('メイン画像設定完了:', jmaImageUrl)
+        console.log('気象庁画像URL確認中:', jmaImageUrl)
+        
+        // 画像URLの存在確認
+        try {
+            const imageCheckResponse = await fetch(jmaImageUrl, { method: 'HEAD' })
+            console.log('画像URL確認結果:', imageCheckResponse.status)
+            
+            if (imageCheckResponse.ok) {
+                embed.setImage(jmaImageUrl)
+                console.log('メイン画像設定完了:', jmaImageUrl)
+            } else {
+                console.log('気象庁画像が見つかりません。代替手段を試行中...')
+                
+                // 代替として震度分布図のリンクを表示
+                embed.addFields({ 
+                    name: '震度分布図', 
+                    value: `[気象庁の震度分布図を確認](https://www.jma.go.jp/bosai/forecast/#area_type=offices&area_code=011000)`, 
+                    inline: false 
+                })
+            }
+        } catch (error) {
+            console.log('画像URL確認エラー:', error)
+            embed.addFields({ 
+                name: '震度分布図', 
+                value: `[気象庁の震度分布図を確認](https://www.jma.go.jp/bosai/forecast/#area_type=offices&area_code=011000)`, 
+                inline: false 
+            })
+        }
 
         // フッターに出典と時刻
         embed.setFooter({ 

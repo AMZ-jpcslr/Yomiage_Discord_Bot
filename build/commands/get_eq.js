@@ -43,8 +43,11 @@ function execute(interaction) {
             const latestId = list[0].json;
             const imageUrl = latestId.replace('.json', '.png');
             const jmaImageUrl = `https://www.jma.go.jp/bosai/quake/data/${imageUrl}`;
+            console.log('最新地震ID:', latestId);
+            console.log('生成された画像URL:', jmaImageUrl);
             const detailRes = yield fetch(`https://www.jma.go.jp/bosai/quake/data/${latestId}`);
             const detail = yield detailRes.json();
+            console.log('地震詳細データ構造:', JSON.stringify(detail, null, 2).substring(0, 500) + '...');
             const time = (_b = (_a = detail.Head) === null || _a === void 0 ? void 0 : _a.ReportDateTime) !== null && _b !== void 0 ? _b : '不明';
             const hypocenter = (_g = (_f = (_e = (_d = (_c = detail.Body) === null || _c === void 0 ? void 0 : _c.Earthquake) === null || _d === void 0 ? void 0 : _d.Hypocenter) === null || _e === void 0 ? void 0 : _e.Area) === null || _f === void 0 ? void 0 : _f.Name) !== null && _g !== void 0 ? _g : '不明';
             const magnitude = (_k = (_j = (_h = detail.Body) === null || _h === void 0 ? void 0 : _h.Earthquake) === null || _j === void 0 ? void 0 : _j.Magnitude) !== null && _k !== void 0 ? _k : '不明';
@@ -136,8 +139,33 @@ function execute(interaction) {
                 console.log('震度画像URLが設定されていません');
             }
             // 気象庁の震度分布画像をメイン画像に設定
-            embed.setImage(jmaImageUrl);
-            console.log('メイン画像設定完了:', jmaImageUrl);
+            console.log('気象庁画像URL確認中:', jmaImageUrl);
+            // 画像URLの存在確認
+            try {
+                const imageCheckResponse = yield fetch(jmaImageUrl, { method: 'HEAD' });
+                console.log('画像URL確認結果:', imageCheckResponse.status);
+                if (imageCheckResponse.ok) {
+                    embed.setImage(jmaImageUrl);
+                    console.log('メイン画像設定完了:', jmaImageUrl);
+                }
+                else {
+                    console.log('気象庁画像が見つかりません。代替手段を試行中...');
+                    // 代替として震度分布図のリンクを表示
+                    embed.addFields({
+                        name: '震度分布図',
+                        value: `[気象庁の震度分布図を確認](https://www.jma.go.jp/bosai/forecast/#area_type=offices&area_code=011000)`,
+                        inline: false
+                    });
+                }
+            }
+            catch (error) {
+                console.log('画像URL確認エラー:', error);
+                embed.addFields({
+                    name: '震度分布図',
+                    value: `[気象庁の震度分布図を確認](https://www.jma.go.jp/bosai/forecast/#area_type=offices&area_code=011000)`,
+                    inline: false
+                });
+            }
             // フッターに出典と時刻
             embed.setFooter({
                 text: 'Earthquake Information by JMA',
