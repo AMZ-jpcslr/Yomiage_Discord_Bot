@@ -65,8 +65,8 @@ export async function createEarthquakeEmbed(latestId: string, isAutoNotify = fal
     let attachments: AttachmentBuilder[] = []
     
     try {
-        const earthquakeMapData = extractEarthquakeMapData(detail)
-        generatedMapPath = await generateEarthquakeMap(earthquakeMapData)
+        const { earthquakeData, areaInfo } = extractEarthquakeMapData(detail)
+        generatedMapPath = await generateEarthquakeMap(earthquakeData, areaInfo)
         
         // 生成された画像をDiscordの添付ファイルとして準備
         const attachment = new AttachmentBuilder(generatedMapPath, { 

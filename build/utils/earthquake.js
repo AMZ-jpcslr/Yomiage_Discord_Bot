@@ -71,8 +71,8 @@ function createEarthquakeEmbed(latestId_1) {
         let generatedMapPath = null;
         let attachments = [];
         try {
-            const earthquakeMapData = (0, mapGenerator_1.extractEarthquakeMapData)(detail);
-            generatedMapPath = yield (0, mapGenerator_1.generateEarthquakeMap)(earthquakeMapData);
+            const { earthquakeData, areaInfo } = (0, mapGenerator_1.extractEarthquakeMapData)(detail);
+            generatedMapPath = yield (0, mapGenerator_1.generateEarthquakeMap)(earthquakeData, areaInfo);
             // 生成された画像をDiscordの添付ファイルとして準備
             const attachment = new discord_js_1.AttachmentBuilder(generatedMapPath, {
                 name: 'earthquake_map.png'
