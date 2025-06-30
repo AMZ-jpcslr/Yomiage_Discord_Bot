@@ -43,47 +43,53 @@ export async function execute(interaction: ChatInputCommandInteraction) {
         const text = detail.Head?.Text ?? ''
         const maxScaleStr = maxScale !== '不明' ? maxScaleToString(Number(maxScale)) : '不明'
 
-        // 震度画像URL
+        // 震度画像URL（.png形式を使用）
         let shindoImageUrl: string | undefined = undefined
         switch (maxScale) {
-            case 10: shindoImageUrl = 'https://gyazo.com/4e7e465a1fadcdacb6b2d7ad77e26613'; break
-            case 20: shindoImageUrl = 'https://gyazo.com/32a63f749d9a95b1bd4c610ac54c3639'; break
-            case 30: shindoImageUrl = 'https://gyazo.com/af3a39eebdc321ae76eab731e60eb110'; break
-            case 40: shindoImageUrl = 'https://gyazo.com/39351fbdd780e0db5a1b4b24b0dfd025'; break
-            case 45: shindoImageUrl = 'https://gyazo.com/7bf28e3aff47cf4c4b8b20bcf9a33b29'; break
-            case 50: shindoImageUrl = 'https://gyazo.com/3cd7bab33cf0682e57ece10df2189988'; break
-            case 55: shindoImageUrl = 'https://gyazo.com/77c3a1e02e8fcb0239afa5e4388146be'; break
-            case 60: shindoImageUrl = 'https://gyazo.com/8ca22b91e82cc578dffed126f3987fbb'; break
-            case 70: shindoImageUrl = 'https://gyazo.com/74b556e4e716116e546e0638ab9e5db4'; break
+            case 10: shindoImageUrl = 'https://i.gyazo.com/4e7e465a1fadcdacb6b2d7ad77e26613.png'; break
+            case 20: shindoImageUrl = 'https://i.gyazo.com/32a63f749d9a95b1bd4c610ac54c3639.png'; break
+            case 30: shindoImageUrl = 'https://i.gyazo.com/af3a39eebdc321ae76eab731e60eb110.png'; break
+            case 40: shindoImageUrl = 'https://i.gyazo.com/39351fbdd780e0db5a1b4b24b0dfd025.png'; break
+            case 45: shindoImageUrl = 'https://i.gyazo.com/7bf28e3aff47cf4c4b8b20bcf9a33b29.png'; break
+            case 50: shindoImageUrl = 'https://i.gyazo.com/3cd7bab33cf0682e57ece10df2189988.png'; break
+            case 55: shindoImageUrl = 'https://i.gyazo.com/77c3a1e02e8fcb0239afa5e4388146be.png'; break
+            case 60: shindoImageUrl = 'https://i.gyazo.com/8ca22b91e82cc578dffed126f3987fbb.png'; break
+            case 70: shindoImageUrl = 'https://i.gyazo.com/74b556e4e716116e546e0638ab9e5db4.png'; break
             default: shindoImageUrl = undefined
         }
 
-        // 埋め込み作成
+        // 埋め込み作成（テレビ形式）
         const embed = new EmbedBuilder()
-            .setTitle('**地震速報**') // 最大サイズの太字
-            .setColor(0x2d3be7)
+            .setTitle('🚨 地震情報')
+            .setColor(0x0099ff) // 青色
             .setDescription(
-                `${text ? text + '\n' : ''}` +
-                `\n` +
-                `**震源**　${hypocenter}\n` +
-                `**規模**　M${magnitude}\n` +
-                `**深さ**　${depth}\n` +
-                `**発生時刻**　${time}\n`
+                `**${time.replace(/T/, ' ').replace(/\+09:00/, '')}ごろ、**\n` +
+                `**最大震度${maxScaleStr}の地震がありました。**\n` +
+                `${text ? text + '\n' : ''}`
+            )
+            .addFields(
+                { name: '震源', value: hypocenter, inline: true },
+                { name: '規模', value: `M${magnitude}`, inline: true },
+                { name: '深さ', value: `${depth}`, inline: true }
             )
 
-        // 震度画像を右上サムネイルに
+        // 最大震度の画像を右上サムネイルに
         if (shindoImageUrl) {
             embed.setThumbnail(shindoImageUrl)
         }
 
-        // 震度分布画像（気象庁公式）を埋め込み画像に
+        // 震度分布画像（気象庁公式）をメイン画像に
         const response = await fetch(jmaImageUrl)
         if (response.ok) {
             embed.setImage(jmaImageUrl)
         }
 
-        // フッターに出典
-        embed.setFooter({ text: 'Earthquake Information by JMA ・ ' + (time || '') })
+        // フッターに出典と時刻
+        embed.setFooter({ 
+            text: 'Earthquake Information by JMA', 
+            iconURL: 'https://www.jma.go.jp/jma/kishou/favicon.ico' 
+        })
+        embed.setTimestamp(new Date())
 
         await interaction.editReply({ embeds: [embed] })
     } catch (e) {
