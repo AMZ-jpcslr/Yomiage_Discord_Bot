@@ -13,9 +13,9 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.startEqAutoNotify = startEqAutoNotify;
-const discord_js_1 = require("discord.js");
 const fs_1 = __importDefault(require("fs"));
 const path_1 = __importDefault(require("path"));
+const earthquake_1 = require("./utils/earthquake");
 const DATA_PATH = path_1.default.join(__dirname, '../../data/eq_channels.json');
 // 通知チャンネル設定をロード
 function loadChannels() {
@@ -36,8 +36,9 @@ function saveLatestId(id) {
 }
 // 定期的に気象庁APIを監視して新しい地震があれば通知
 function startEqAutoNotify(client) {
+    console.log('地震自動通知システムを開始しました（60秒間隔）');
     setInterval(() => __awaiter(this, void 0, void 0, function* () {
-        var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p, _q, _r, _s, _t, _u, _v, _w;
+        var _a;
         try {
             const res = yield fetch('https://www.jma.go.jp/bosai/quake/data/list.json');
             const list = yield res.json();
@@ -53,47 +54,41 @@ function startEqAutoNotify(client) {
                 console.warn('不正なlatestId:', latestId);
                 return;
             }
-            if (latestId === loadLatestId())
-                return; // すでに通知済み
-            const detailUrl = `https://www.jma.go.jp/bosai/quake/data/${latestId}`;
-            try {
-                new URL(detailUrl); // URLとしてパースできるかチェック
-            }
-            catch (_x) {
-                console.warn('不正なURL:', detailUrl);
+            const previousLatestId = loadLatestId();
+            if (latestId === previousLatestId) {
+                // すでに通知済み（ログは出力しない）
                 return;
             }
-            console.log('地震詳細取得URL:', detailUrl);
-            const detailRes = yield fetch(detailUrl);
-            const detail = yield detailRes.json();
-            // 必要な情報を抽出
-            const time = (_c = (_b = detail.Head) === null || _b === void 0 ? void 0 : _b.ReportDateTime) !== null && _c !== void 0 ? _c : '不明';
-            const hypocenter = (_h = (_g = (_f = (_e = (_d = detail.Body) === null || _d === void 0 ? void 0 : _d.Earthquake) === null || _e === void 0 ? void 0 : _e.Hypocenter) === null || _f === void 0 ? void 0 : _f.Area) === null || _g === void 0 ? void 0 : _g.Name) !== null && _h !== void 0 ? _h : '不明';
-            const magnitude = (_l = (_k = (_j = detail.Body) === null || _j === void 0 ? void 0 : _j.Earthquake) === null || _k === void 0 ? void 0 : _k.Magnitude) !== null && _l !== void 0 ? _l : '不明';
-            const maxScale = (_q = (_p = (_o = (_m = detail.Body) === null || _m === void 0 ? void 0 : _m.Intensity) === null || _o === void 0 ? void 0 : _o.Observation) === null || _p === void 0 ? void 0 : _p.MaxInt) !== null && _q !== void 0 ? _q : '不明';
-            const lat = (_t = (_s = (_r = detail.Body) === null || _r === void 0 ? void 0 : _r.Earthquake) === null || _s === void 0 ? void 0 : _s.Hypocenter) === null || _t === void 0 ? void 0 : _t.Latitude;
-            const lon = (_w = (_v = (_u = detail.Body) === null || _u === void 0 ? void 0 : _u.Earthquake) === null || _v === void 0 ? void 0 : _v.Hypocenter) === null || _w === void 0 ? void 0 : _w.Longitude;
-            const mapUrl = (lat && lon)
-                ? `https://static-maps.yandex.ru/1.x/?ll=${lon},${lat}&z=6&size=450,300&l=map&pt=${lon},${lat},pm2rdm`
-                : undefined;
-            const embed = new discord_js_1.EmbedBuilder()
-                .setTitle('【自動通知】地震情報（気象庁）')
-                .setDescription(`発生時刻: ${time}\n震源地: ${hypocenter}\nマグニチュード: ${magnitude}\n最大震度: ${maxScale}`)
-                .setColor(0xff0000);
-            if (mapUrl)
-                embed.setImage(mapUrl);
+            console.log('新しい地震情報を検出:', latestId);
+            console.log('前回の地震ID:', previousLatestId);
+            // 共通関数を使用して地震情報の埋め込みを作成
+            const embed = yield (0, earthquake_1.createEarthquakeEmbed)(latestId, true);
             // 通知チャンネルへ送信
             const channels = loadChannels();
+            let notificationCount = 0;
             for (const guildId in channels) {
                 const channelId = channels[guildId];
                 const guild = client.guilds.cache.get(guildId);
-                if (!guild)
+                if (!guild) {
+                    console.warn(`Guild not found: ${guildId}`);
                     continue;
+                }
                 const channel = guild.channels.cache.get(channelId);
                 if (channel && channel.isTextBased()) {
-                    channel.send({ embeds: [embed] });
+                    try {
+                        yield channel.send({ embeds: [embed] });
+                        notificationCount++;
+                        console.log(`地震通知送信完了: ${guild.name} (#${channel.name})`);
+                    }
+                    catch (error) {
+                        console.error(`地震通知送信エラー (${guild.name}):`, error);
+                    }
+                }
+                else {
+                    console.warn(`Channel not found or not text-based: Guild=${guild.name}, Channel=${channelId}`);
                 }
             }
+            console.log(`地震自動通知完了: ${notificationCount}チャンネルに送信`);
             saveLatestId(latestId);
         }
         catch (e) {

@@ -1,6 +1,7 @@
-import { Client, TextChannel, EmbedBuilder } from 'discord.js'
+import { Client, TextChannel } from 'discord.js'
 import fs from 'fs'
 import path from 'path'
+import { createEarthquakeEmbed } from './utils/earthquake'
 
 const DATA_PATH = path.join(__dirname, '../../data/eq_channels.json')
 
@@ -23,6 +24,8 @@ function saveLatestId(id: string) {
 
 // 定期的に気象庁APIを監視して新しい地震があれば通知
 export function startEqAutoNotify(client: Client) {
+    console.log('地震自動通知システムを開始しました（60秒間隔）')
+    
     setInterval(async () => {
         try {
             const res = await fetch('https://www.jma.go.jp/bosai/quake/data/list.json')
@@ -40,50 +43,46 @@ export function startEqAutoNotify(client: Client) {
                 console.warn('不正なlatestId:', latestId)
                 return
             }
-            if (latestId === loadLatestId()) return // すでに通知済み
-
-            const detailUrl = `https://www.jma.go.jp/bosai/quake/data/${latestId}`
-            try {
-                new URL(detailUrl) // URLとしてパースできるかチェック
-            } catch {
-                console.warn('不正なURL:', detailUrl)
+            
+            const previousLatestId = loadLatestId()
+            if (latestId === previousLatestId) {
+                // すでに通知済み（ログは出力しない）
                 return
             }
-            console.log('地震詳細取得URL:', detailUrl)
 
-            const detailRes = await fetch(detailUrl)
-            const detail = await detailRes.json() as any
+            console.log('新しい地震情報を検出:', latestId)
+            console.log('前回の地震ID:', previousLatestId)
 
-            // 必要な情報を抽出
-            const time = detail.Head?.ReportDateTime ?? '不明'
-            const hypocenter = detail.Body?.Earthquake?.Hypocenter?.Area?.Name ?? '不明'
-            const magnitude = detail.Body?.Earthquake?.Magnitude ?? '不明'
-            const maxScale = detail.Body?.Intensity?.Observation?.MaxInt ?? '不明'
-            const lat = detail.Body?.Earthquake?.Hypocenter?.Latitude
-            const lon = detail.Body?.Earthquake?.Hypocenter?.Longitude
-            const mapUrl = (lat && lon)
-                ? `https://static-maps.yandex.ru/1.x/?ll=${lon},${lat}&z=6&size=450,300&l=map&pt=${lon},${lat},pm2rdm`
-                : undefined
-
-            const embed = new EmbedBuilder()
-                .setTitle('【自動通知】地震情報（気象庁）')
-                .setDescription(
-                    `発生時刻: ${time}\n震源地: ${hypocenter}\nマグニチュード: ${magnitude}\n最大震度: ${maxScale}`
-                )
-                .setColor(0xff0000)
-            if (mapUrl) embed.setImage(mapUrl)
+            // 共通関数を使用して地震情報の埋め込みを作成
+            const embed = await createEarthquakeEmbed(latestId, true)
 
             // 通知チャンネルへ送信
             const channels = loadChannels()
+            let notificationCount = 0
+            
             for (const guildId in channels) {
                 const channelId = channels[guildId]
                 const guild = client.guilds.cache.get(guildId)
-                if (!guild) continue
+                if (!guild) {
+                    console.warn(`Guild not found: ${guildId}`)
+                    continue
+                }
+                
                 const channel = guild.channels.cache.get(channelId) as TextChannel
                 if (channel && channel.isTextBased()) {
-                    channel.send({ embeds: [embed] })
+                    try {
+                        await channel.send({ embeds: [embed] })
+                        notificationCount++
+                        console.log(`地震通知送信完了: ${guild.name} (#${channel.name})`)
+                    } catch (error) {
+                        console.error(`地震通知送信エラー (${guild.name}):`, error)
+                    }
+                } else {
+                    console.warn(`Channel not found or not text-based: Guild=${guild.name}, Channel=${channelId}`)
                 }
             }
+            
+            console.log(`地震自動通知完了: ${notificationCount}チャンネルに送信`)
             saveLatestId(latestId)
         } catch (e) {
             console.error('地震自動通知エラー:', e)
