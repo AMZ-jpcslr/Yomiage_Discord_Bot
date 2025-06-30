@@ -1,4 +1,4 @@
-import { SlashCommandBuilder, ChatInputCommandInteraction, EmbedBuilder, AttachmentBuilder } from 'discord.js'
+import { SlashCommandBuilder, ChatInputCommandInteraction, EmbedBuilder } from 'discord.js'
 
 export const data = new SlashCommandBuilder()
     .setName('get_eq')
@@ -45,7 +45,8 @@ export async function execute(interaction: ChatInputCommandInteraction) {
 
         // 震度画像URL（.png形式を使用）
         let shindoImageUrl: string | undefined = undefined
-        switch (maxScale) {
+        const maxScaleNum = maxScale !== '不明' ? Number(maxScale) : 0
+        switch (maxScaleNum) {
             case 10: shindoImageUrl = 'https://i.gyazo.com/4e7e465a1fadcdacb6b2d7ad77e26613.png'; break
             case 20: shindoImageUrl = 'https://i.gyazo.com/32a63f749d9a95b1bd4c610ac54c3639.png'; break
             case 30: shindoImageUrl = 'https://i.gyazo.com/af3a39eebdc321ae76eab731e60eb110.png'; break
@@ -73,35 +74,21 @@ export async function execute(interaction: ChatInputCommandInteraction) {
                 { name: '深さ', value: `${depth}`, inline: true }
             )
 
-        const attachments: AttachmentBuilder[] = []
+        console.log('震度値:', maxScale, '型:', typeof maxScale)
+        console.log('震度画像URL:', shindoImageUrl)
+        console.log('気象庁画像URL:', jmaImageUrl)
 
-        // 震度画像をダウンロードして添付
+        // 震度画像を右上サムネイルに設定
         if (shindoImageUrl) {
-            try {
-                const shindoResponse = await fetch(shindoImageUrl)
-                if (shindoResponse.ok) {
-                    const shindoBuffer = Buffer.from(await shindoResponse.arrayBuffer())
-                    const shindoAttachment = new AttachmentBuilder(shindoBuffer, { name: `shindo_${maxScale}.png` })
-                    attachments.push(shindoAttachment)
-                    embed.setThumbnail(`attachment://shindo_${maxScale}.png`)
-                }
-            } catch (error) {
-                console.log('震度画像の取得に失敗:', error)
-            }
+            embed.setThumbnail(shindoImageUrl)
+            console.log('サムネイル設定完了:', shindoImageUrl)
+        } else {
+            console.log('震度画像URLが設定されていません')
         }
 
-        // 震度分布画像をダウンロードして添付
-        try {
-            const mapResponse = await fetch(jmaImageUrl)
-            if (mapResponse.ok) {
-                const mapBuffer = Buffer.from(await mapResponse.arrayBuffer())
-                const mapAttachment = new AttachmentBuilder(mapBuffer, { name: 'earthquake_map.png' })
-                attachments.push(mapAttachment)
-                embed.setImage('attachment://earthquake_map.png')
-            }
-        } catch (error) {
-            console.log('地震マップの取得に失敗:', error)
-        }
+        // 気象庁の震度分布画像をメイン画像に設定
+        embed.setImage(jmaImageUrl)
+        console.log('メイン画像設定完了:', jmaImageUrl)
 
         // フッターに出典と時刻
         embed.setFooter({ 
@@ -110,7 +97,7 @@ export async function execute(interaction: ChatInputCommandInteraction) {
         })
         embed.setTimestamp(new Date())
 
-        await interaction.editReply({ embeds: [embed], files: attachments })
+        await interaction.editReply({ embeds: [embed] })
     } catch (e) {
         console.error(e)
         await interaction.editReply('地震情報の取得中にエラーが発生しました。')
