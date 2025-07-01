@@ -1,7 +1,7 @@
 {
   "name": "discord_bot",
   "version": "1.0.0",
-  "main": "index.js",
+  "main": "build/main.js",
   "scripts": {
     "test": "ts-node src/main.ts",
     "start": "node build/main.js",
