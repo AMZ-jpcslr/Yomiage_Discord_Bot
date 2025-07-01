@@ -52,6 +52,30 @@ railway variables
 ## トラブルシューティング
 
 ### 方法1: Alpine Dockerfileでエラーの場合、Ubuntu版を試す
+
+**Windows コマンドプロンプト:**
+```cmd
+REM 自動切り替えスクリプトを実行
+scripts\switch-dockerfile.bat
+
+REM または手動で切り替え
+copy Dockerfile Dockerfile.alpine
+copy Dockerfile.ubuntu Dockerfile
+railway up
+```
+
+**Windows PowerShell:**
+```powershell
+# 自動切り替えスクリプトを実行
+.\scripts\switch-dockerfile.ps1
+
+# または手動で切り替え
+Copy-Item Dockerfile Dockerfile.alpine
+Copy-Item Dockerfile.ubuntu Dockerfile
+railway up
+```
+
+**Linux/Mac:**
 ```bash
 # 現在のDockerfileをバックアップ
 mv Dockerfile Dockerfile.alpine
