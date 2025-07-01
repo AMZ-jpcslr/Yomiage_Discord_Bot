@@ -133,9 +133,9 @@ ws.on('message', (data) => __awaiter(void 0, void 0, void 0, function* () {
         if (json.code === 551) { // 緊急地震速報
             console.log('=== 緊急地震速報を受信 ===');
             console.log('受信時刻:', new Date().toISOString());
-            // P2P地震情報データを使用して共通の地震情報埋め込みを作成
+            // P2P地震情報データを統一された処理関数で処理
             console.log('地震情報埋め込みの作成を開始...');
-            const result = yield (0, earthquake_1.createEarthquakeEmbedFromP2PData)(json);
+            const result = yield (0, earthquake_1.processP2PEarthquakeAlert)(json);
             if (!result) {
                 console.error('❌ P2P地震情報から埋め込み作成に失敗');
                 return;

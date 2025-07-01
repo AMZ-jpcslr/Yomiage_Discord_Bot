@@ -379,12 +379,20 @@ function generateEarthquakeMap(earthquakeData, areaInfo) {
             if (!fs.existsSync(outputDir)) {
                 fs.mkdirSync(outputDir, { recursive: true });
             }
+            // 古い画像を削除して最新N枚を保持（環境変数で設定可能、デフォルト10枚）
+            const maxImages = parseInt(process.env.MAX_GENERATED_IMAGES || '10');
+            manageImageFiles(outputDir, maxImages);
             const filepath = path.join(outputDir, filename);
             // Convert SVG to PNG
             yield (0, sharp_1.default)(Buffer.from(svgHtml))
                 .png()
                 .toFile(filepath);
-            console.log('Generated earthquake map:', filepath);
+            console.log('✅ 地震マップ画像を生成しました:', filename);
+            console.log('📁 保存パス:', filepath);
+            // 生成後のファイル数を確認
+            const finalFileCount = fs.readdirSync(outputDir).filter(f => f.endsWith('.png') && f.startsWith('earthquake_map_')).length;
+            console.log(`📊 現在の地震マップ画像数: ${finalFileCount}枚`);
+            return filepath;
             return filepath;
         }
         catch (error) {
@@ -392,6 +400,58 @@ function generateEarthquakeMap(earthquakeData, areaInfo) {
             throw error;
         }
     });
+}
+// 古い地震マップ画像を削除して最新N枚を保持する関数
+function manageImageFiles(outputDir, maxImages = 10) {
+    try {
+        if (!fs.existsSync(outputDir)) {
+            return;
+        }
+        // generated_imagesディレクトリ内の.pngファイルを取得
+        const files = fs.readdirSync(outputDir)
+            .filter(file => file.endsWith('.png') && file.startsWith('earthquake_map_'))
+            .map(file => {
+            const filepath = path.join(outputDir, file);
+            const stats = fs.statSync(filepath);
+            return {
+                name: file,
+                path: filepath,
+                mtime: stats.mtime.getTime()
+            };
+        })
+            .sort((a, b) => b.mtime - a.mtime); // 新しい順にソート
+        console.log(`地震マップ画像管理: 現在${files.length}枚の画像があります（上限: ${maxImages}枚）`);
+        // デバッグ用：現在のファイル一覧を表示
+        if (files.length > 0) {
+            console.log('既存ファイル一覧（新しい順）:');
+            files.slice(0, 5).forEach((file, index) => {
+                const date = new Date(file.mtime).toLocaleString('ja-JP');
+                console.log(`  ${index + 1}. ${file.name} (${date})`);
+            });
+            if (files.length > 5) {
+                console.log(`  ... 他${files.length - 5}枚`);
+            }
+        }
+        // 上限を超える場合は古いファイルを削除
+        if (files.length >= maxImages) {
+            const filesToDelete = files.slice(maxImages - 1); // 新しい画像が1枚追加されることを考慮
+            console.log(`上限${maxImages}枚を維持するため、${filesToDelete.length}枚の古い画像を削除します`);
+            for (const file of filesToDelete) {
+                try {
+                    fs.unlinkSync(file.path);
+                    console.log(`削除済み: ${file.name}`);
+                }
+                catch (deleteError) {
+                    console.error(`ファイル削除エラー: ${file.name}`, deleteError);
+                }
+            }
+        }
+        const remainingCount = files.length - (files.length >= maxImages ? files.length - maxImages + 1 : 0);
+        console.log(`地震マップ画像管理完了: ${remainingCount + 1}枚の画像を保持`);
+    }
+    catch (error) {
+        console.error('地震マップ画像管理エラー:', error);
+    }
 }
 // 震度データと地震情報を抽出する関数
 function extractEarthquakeMapData(detail) {

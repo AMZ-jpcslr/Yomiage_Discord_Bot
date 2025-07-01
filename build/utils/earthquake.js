@@ -44,6 +44,8 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.createEarthquakeEmbed = createEarthquakeEmbed;
 exports.createEarthquakeEmbedFromP2PData = createEarthquakeEmbedFromP2PData;
+exports.findJMAEarthquakeId = findJMAEarthquakeId;
+exports.processP2PEarthquakeAlert = processP2PEarthquakeAlert;
 const discord_js_1 = require("discord.js");
 const mapGenerator_new_1 = require("./mapGenerator_new");
 const fs = __importStar(require("fs"));
@@ -399,7 +401,7 @@ function convertP2PtoJMAFormat(p2pData) {
         p2pRecord.mag ||
         '不明';
     // 最大震度の取得（P2P API特有のフィールド名）
-    let maxScaleValue = earthquakeData.maxScale ||
+    let maxScaleValue = Number(earthquakeData.maxScale ||
         earthquakeData.max_scale ||
         earthquakeData.maxInt ||
         earthquakeData.max_int ||
@@ -407,7 +409,29 @@ function convertP2PtoJMAFormat(p2pData) {
         p2pRecord.max_scale ||
         p2pRecord.maxInt ||
         p2pRecord.max_int ||
-        0;
+        0);
+    // 緊急地震速報の場合の特別処理
+    if (p2pRecord.code === 551 && p2pRecord.areas) {
+        console.log('緊急地震速報（code: 551）の特別処理を実行');
+        const areas = p2pRecord.areas;
+        // エリア情報から最大震度を取得
+        let maxAreaScale = 0;
+        areas.forEach((area, index) => {
+            console.log(`エリア${index + 1}:`, JSON.stringify(area, null, 2));
+            const scaleFrom = Number(area.scaleFrom || 0);
+            const scaleTo = Number(area.scaleTo || area.scaleFrom || 0);
+            maxAreaScale = Math.max(maxAreaScale, scaleTo, scaleFrom);
+        });
+        if (maxAreaScale > maxScaleValue) {
+            maxScaleValue = maxAreaScale;
+            console.log(`エリア情報から最大震度を更新: ${maxAreaScale}`);
+        }
+        // 第1エリアから震源地名を取得（震源地名が不明の場合）
+        if (hypocenterName === '不明' && areas.length > 0 && areas[0].name) {
+            hypocenterName = String(areas[0].name);
+            console.log(`エリア情報から震源地名を取得: ${hypocenterName}`);
+        }
+    }
     console.log('=== 抽出結果 ===');
     console.log('- timeValue:', timeValue);
     console.log('- hypocenterName:', hypocenterName);
@@ -788,5 +812,129 @@ function createEarthquakeEmbedFromData(detailData_1) {
             files: attachments.length > 0 ? attachments : undefined,
             mapGenerated: mapGenerationSuccess
         };
+    });
+}
+// P2P地震情報データからJMAの地震IDを特定する関数
+function findJMAEarthquakeId(p2pData) {
+    return __awaiter(this, void 0, void 0, function* () {
+        var _a, _b, _c, _d;
+        try {
+            console.log('=== JMA地震情報一覧を取得中... ===');
+            const res = yield fetch('https://www.jma.go.jp/bosai/quake/data/list.json');
+            const list = yield res.json();
+            if (!list.length) {
+                console.log('❌ JMA地震情報一覧が空です');
+                return null;
+            }
+            console.log(`📋 JMA地震情報 ${list.length}件を取得`);
+            // P2P地震情報から基本情報を抽出（安全な型チェック）
+            if (!p2pData.time) {
+                console.log('❌ P2P地震情報に時刻データがありません');
+                return null;
+            }
+            const p2pTime = new Date(p2pData.time);
+            // 震源地名は複数の場所から取得可能
+            const p2pHypocenter = ((_b = (_a = p2pData.earthquake) === null || _a === void 0 ? void 0 : _a.hypocenter) === null || _b === void 0 ? void 0 : _b.name) || ((_c = p2pData.hypocenter) === null || _c === void 0 ? void 0 : _c.name);
+            // マグニチュードも複数の場所から取得可能
+            const p2pMagnitude = parseFloat(String(((_d = p2pData.earthquake) === null || _d === void 0 ? void 0 : _d.magnitude) || p2pData.magnitude || 0));
+            console.log(`🔍 P2P情報 - 時刻: ${p2pTime.toISOString()}, 震源: ${p2pHypocenter}, M: ${p2pMagnitude}`);
+            // 直近の地震情報から類似するものを検索（最新30件を確認）
+            for (let i = 0; i < Math.min(30, list.length); i++) {
+                const item = list[i];
+                try {
+                    console.log(`🔍 JMA地震情報 ${i + 1}/${Math.min(30, list.length)}: ${item.json} (${item.anm})`);
+                    const detailRes = yield fetch(`https://www.jma.go.jp/bosai/quake/data/${item.json}`);
+                    const detail = yield detailRes.json();
+                    const jmaTimeStr = safeGet(detail, 'Body.Earthquake.OriginTime') || safeGet(detail, 'Head.ReportDateTime');
+                    if (!jmaTimeStr) {
+                        console.log(`⚠️  時刻情報なし - スキップ`);
+                        continue;
+                    }
+                    const jmaTime = new Date(jmaTimeStr);
+                    const jmaHypocenter = safeGet(detail, 'Body.Earthquake.Hypocenter.Area.Name');
+                    const jmaMagnitude = parseFloat(safeGet(detail, 'Body.Earthquake.Magnitude') || '0');
+                    // 時刻の差を計算
+                    const timeDiff = Math.abs(p2pTime.getTime() - jmaTime.getTime());
+                    const timeDiffMinutes = timeDiff / (1000 * 60);
+                    console.log(`⏰ 時刻差: ${timeDiffMinutes.toFixed(1)}分, 震源: ${jmaHypocenter}, M: ${jmaMagnitude}`);
+                    // 時刻による絞り込み（最初に2時間以内、見つからなければ段階的に拡大）
+                    let maxTimeDiffMinutes = 120; // 最初は2時間以内
+                    if (i > 10)
+                        maxTimeDiffMinutes = 360; // 10件目以降は6時間以内
+                    if (i > 20)
+                        maxTimeDiffMinutes = 1440; // 20件目以降は24時間以内
+                    if (timeDiffMinutes <= maxTimeDiffMinutes) {
+                        // 震源地名の類似性をチェック（部分一致）
+                        const hypoMatch = !!(p2pHypocenter && jmaHypocenter &&
+                            (p2pHypocenter.includes(jmaHypocenter) || jmaHypocenter.includes(p2pHypocenter)));
+                        // マグニチュードの類似性をチェック（±1.0以内、緊急地震速報では精度が低い場合がある）
+                        const magMatch = p2pMagnitude > 0 && jmaMagnitude > 0 &&
+                            Math.abs(p2pMagnitude - jmaMagnitude) <= 1.0;
+                        console.log(`🎯 マッチング結果 - 震源: ${hypoMatch ? '✅' : '❌'}, マグニチュード: ${magMatch ? '✅' : '❌'}`);
+                        // 条件に応じたマッチング
+                        let isMatch = false;
+                        if (timeDiffMinutes <= 30) {
+                            // 30分以内なら震源地またはマグニチュードのいずれかが一致すれば採用
+                            isMatch = hypoMatch || magMatch;
+                        }
+                        else if (timeDiffMinutes <= 120) {
+                            // 2時間以内なら震源地とマグニチュード両方が一致する必要
+                            isMatch = hypoMatch && magMatch;
+                        }
+                        else {
+                            // それ以上は厳密な一致が必要
+                            isMatch = hypoMatch && magMatch && timeDiffMinutes <= maxTimeDiffMinutes;
+                        }
+                        if (isMatch) {
+                            console.log(`✅ JMA地震ID ${item.json} が P2P地震情報と一致 (時刻差: ${timeDiffMinutes.toFixed(1)}分)`);
+                            return item.json;
+                        }
+                    }
+                    else if (i < 10) {
+                        console.log(`⏭️  時刻差が大きすぎます (${timeDiffMinutes.toFixed(1)}分 > ${maxTimeDiffMinutes}分)`);
+                    }
+                }
+                catch (error) {
+                    console.error(`❌ JMA地震詳細データ取得エラー (${item.json}):`, error);
+                    continue;
+                }
+            }
+            console.log('⚠️  P2P地震情報に対応するJMA地震IDが見つかりませんでした');
+            console.log('📝 フォールバック処理（P2P→JMA変換）を使用します');
+            return null;
+        }
+        catch (error) {
+            console.error('❌ JMA地震ID検索中にエラー:', error);
+            return null;
+        }
+    });
+}
+// P2P地震情報を受信した際のメイン処理関数
+function processP2PEarthquakeAlert(p2pData) {
+    return __awaiter(this, void 0, void 0, function* () {
+        try {
+            console.log('=== P2P地震情報の処理開始 ===');
+            // まずJMAの地震IDを特定を試行
+            const jmaEarthquakeId = yield findJMAEarthquakeId(p2pData);
+            if (jmaEarthquakeId) {
+                console.log(`✅ JMA地震ID ${jmaEarthquakeId} を使用して地震情報を取得`);
+                // JMAの地震IDが特定できた場合は、統一された関数を使用
+                const result = yield createEarthquakeEmbed(jmaEarthquakeId, true);
+                return {
+                    embed: result.embed,
+                    files: result.files,
+                    mapGenerated: result.files && result.files.length > 0
+                };
+            }
+            else {
+                console.log('⚠️  JMA地震IDが特定できないため、P2Pデータから直接生成');
+                // フォールバック: P2Pデータから直接生成
+                return yield createEarthquakeEmbedFromP2PData(p2pData);
+            }
+        }
+        catch (error) {
+            console.error('P2P地震情報処理中にエラー:', error);
+            return null;
+        }
     });
 }
