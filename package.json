@@ -26,6 +26,7 @@
   },
   "dependencies": {
     "@discordjs/rest": "^2.5.1",
+    "canvas": "^3.1.2",
     "d3": "^7.9.0",
     "d3-queue": "^3.0.7",
     "discord-api-types": "^0.38.12",

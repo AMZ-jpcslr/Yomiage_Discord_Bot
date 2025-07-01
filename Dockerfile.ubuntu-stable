@@ -1,0 +1,59 @@
+# Ubuntu版 Canvas対応 安定版 Dockerfile
+FROM node:18-bullseye
+
+# システムの更新とCanvas依存関係のインストール
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    libcairo2-dev \
+    libpango1.0-dev \
+    libjpeg-dev \
+    libgif-dev \
+    librsvg2-dev \
+    libpixman-1-dev \
+    pkg-config \
+    python3 \
+    make \
+    g++ \
+    fontconfig \
+    fonts-dejavu-core \
+    fonts-liberation \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
+
+# Node.jsのバージョン確認
+RUN node --version && npm --version
+
+WORKDIR /app
+
+# package.jsonとpackage-lock.jsonを先にコピー
+COPY package*.json ./
+
+# Canvas用の環境変数設定
+ENV CANVAS_PREBUILT=false
+ENV PYTHON=/usr/bin/python3
+
+# 依存関係のインストール（詳細ログ付き）
+RUN npm install --verbose --build-from-source
+
+# 残りのファイルをコピー
+COPY . .
+
+# TypeScriptコンパイル
+RUN npm run compile
+
+# 必要なディレクトリを作成
+RUN mkdir -p generated_images generated_maps logs
+
+# 実行時環境変数
+ENV NODE_ENV=production
+ENV SKIP_MAP_GENERATION=false
+ENV FORCE_MAP_GENERATION=true
+
+# ポートの露出
+EXPOSE 3000
+
+# ヘルスチェック
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+  CMD node -e "console.log('Health check')" || exit 1
+
+# 起動コマンド
+CMD ["node", "build/main.js"]

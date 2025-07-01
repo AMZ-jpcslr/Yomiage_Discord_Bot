@@ -1,0 +1,42 @@
+# Canvas対応 Ubuntu版 Dockerfile
+FROM node:18-bullseye-slim
+
+# Canvas依存関係をインストール（Ubuntu/Debian）
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    libcairo2-dev \
+    libpango1.0-dev \
+    libjpeg-dev \
+    libgif-dev \
+    librsvg2-dev \
+    pkg-config \
+    python3 \
+    fontconfig \
+    fonts-dejavu-core \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# すべてのファイルをコピー
+COPY . .
+
+# Canvas対応の依存関係インストール
+RUN npm install
+
+# TypeScriptコンパイル
+RUN npm run compile
+
+# 必要なディレクトリを作成
+RUN mkdir -p generated_images generated_maps
+
+# 環境変数
+ENV NODE_ENV=production
+ENV SKIP_MAP_GENERATION=false
+ENV FORCE_MAP_GENERATION=true
+ENV CANVAS_PREBUILT=false
+
+# ポート
+EXPOSE 3000
+
+# 起動
+CMD ["node", "build/main.js"]

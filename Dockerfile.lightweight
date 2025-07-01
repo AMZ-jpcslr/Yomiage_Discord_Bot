@@ -1,0 +1,39 @@
+# 軽量版 Dockerfile（Canvas無し、外部マップサービス利用）
+FROM node:18-alpine
+
+# 基本的なビルドツールとPython3のインストール
+RUN apk add --no-cache \
+    python3 \
+    make \
+    g++ \
+    fontconfig \
+    ttf-dejavu
+
+WORKDIR /app
+
+# package.jsonをコピー
+COPY package*.json ./
+
+# Canvas以外の依存関係のインストール
+RUN npm install --omit=optional --production=false
+
+# 残りのファイルをコピー
+COPY . .
+
+# TypeScriptコンパイル
+RUN npm run compile
+
+# 必要なディレクトリを作成
+RUN mkdir -p generated_images generated_maps logs
+
+# 環境変数（マップ生成をスキップ、外部サービス利用）
+ENV NODE_ENV=production
+ENV SKIP_MAP_GENERATION=true
+ENV USE_EXTERNAL_MAP_SERVICE=true
+ENV FORCE_MAP_GENERATION=false
+
+# ポート
+EXPOSE 3000
+
+# 起動
+CMD ["node", "build/main.js"]
