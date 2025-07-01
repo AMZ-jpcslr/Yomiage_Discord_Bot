@@ -357,7 +357,7 @@ export async function createEarthquakeEmbed(latestId: string, isAutoNotify = fal
         )
         .addFields(
             { name: '震源', value: hypocenter !== '不明' ? hypocenter : '情報なし', inline: true },
-            { name: '規模', value: magnitude !== '不明' ? `M${magnitude}` : '情報なし', inline: true },
+            { name: '規模', value: (magnitude !== '不明' && magnitude !== '' && magnitude !== 'M速報値') ? `M${magnitude}` : '情報なし', inline: true },
             { name: '深さ', value: depth !== '不明' ? depth : '情報なし', inline: true }
         )
     
@@ -489,6 +489,27 @@ function convertP2PtoJMAFormat(p2pData: P2PEarthquakeData): Record<string, unkno
                           p2pRecord.magnitude || 
                           p2pRecord.mag ||
                           '不明'
+    
+    // マグニチュード値の正規化処理
+    if (magnitudeValue && magnitudeValue !== '不明') {
+        const magStr = String(magnitudeValue)
+        
+        // "M速報値"などの不適切な値を除去
+        if (magStr.includes('速報') || magStr.includes('未確定') || magStr.includes('調査中')) {
+            console.log(`無効なマグニチュード値を検出: "${magStr}" -> "不明"に変更`)
+            magnitudeValue = '不明'
+        } 
+        // 数値のマグニチュードのみを許可
+        else if (!isNaN(Number(magStr)) && Number(magStr) > 0 && Number(magStr) <= 10) {
+            magnitudeValue = Number(magStr).toFixed(1)  // 小数点1桁に統一
+            console.log(`マグニチュード値を正規化: ${magStr} -> ${magnitudeValue}`)
+        }
+        // その他の形式は"不明"とする
+        else {
+            console.log(`未対応のマグニチュード形式: "${magStr}" -> "不明"に変更`)
+            magnitudeValue = '不明'
+        }
+    }
     
     // 最大震度の取得（P2P API特有のフィールド名）
     let maxScaleValue = Number(earthquakeData.maxScale ||
@@ -967,7 +988,7 @@ async function createEarthquakeEmbedFromData(detailData: Record<string, unknown>
         )
         .addFields(
             { name: '震源', value: hypocenter !== '不明' ? hypocenter : '情報なし', inline: true },
-            { name: '規模', value: magnitude !== '不明' ? `M${magnitude}` : '情報なし', inline: true },
+            { name: '規模', value: (magnitude !== '不明' && magnitude !== '' && magnitude !== 'M速報値') ? `M${magnitude}` : '情報なし', inline: true },
             { name: '深さ', value: depth !== '不明' ? depth : '情報なし', inline: true }
         )
     

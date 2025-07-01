@@ -145,12 +145,32 @@ export async function generateEarthquakeMap(earthquakeData: EarthquakeData, area
         
         // Process areas if they exist (earthquake-alert/map-draw style)
         for (const area_key in area_info.areas) {
-            for (const element of area_info.areas[area_key]) {
-                sum_longitude += element[0]
-                sum_latitude += element[1]
-                longitude = [Math.max(longitude[0], element[0]), Math.min(longitude[1], element[0])]
-                latitude = [Math.max(latitude[0], element[1]), Math.min(latitude[1], element[1])]
-                volume++
+            const area = area_info.areas[area_key]
+            
+            // area が配列であることを確認
+            if (Array.isArray(area)) {
+                for (const element of area) {
+                    if (Array.isArray(element) && element.length >= 2) {
+                        sum_longitude += element[0]
+                        sum_latitude += element[1]
+                        longitude = [Math.max(longitude[0], element[0]), Math.min(longitude[1], element[0])]
+                        latitude = [Math.max(latitude[0], element[1]), Math.min(latitude[1], element[1])]
+                        volume++
+                    }
+                }
+            } else if (area && typeof area === 'object') {
+                // area がオブジェクトの場合は座標を直接取得を試行
+                console.log(`エリア ${area_key} はオブジェクト形式:`, area)
+                const areaObj = area as Record<string, unknown>
+                if (typeof areaObj.longitude === 'number' && typeof areaObj.latitude === 'number') {
+                    sum_longitude += areaObj.longitude
+                    sum_latitude += areaObj.latitude
+                    longitude = [Math.max(longitude[0], areaObj.longitude), Math.min(longitude[1], areaObj.longitude)]
+                    latitude = [Math.max(latitude[0], areaObj.latitude), Math.min(latitude[1], areaObj.latitude)]
+                    volume++
+                }
+            } else {
+                console.warn(`エリア ${area_key} の形式が不正です:`, typeof area, area)
             }
         }
         
