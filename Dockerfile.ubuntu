@@ -1,0 +1,58 @@
+# Alternative Dockerfile using Ubuntu base (if Alpine has issues)
+FROM node:18-bullseye-slim
+
+# Update package lists
+RUN apt-get update
+
+# Install dependencies for Canvas and other libraries
+RUN apt-get install -y \
+    build-essential \
+    libcairo2-dev \
+    libpango1.0-dev \
+    libjpeg-dev \
+    libgif-dev \
+    librsvg2-dev \
+    pkg-config \
+    python3 \
+    python3-pip \
+    fonts-dejavu-core \
+    fontconfig
+
+# Clean up apt cache
+RUN apt-get clean && rm -rf /var/lib/apt/lists/*
+
+# Set working directory
+WORKDIR /app
+
+# Copy package files
+COPY package*.json ./
+
+# Set npm configuration for Canvas
+ENV CANVAS_PREBUILT=false
+ENV npm_config_build_from_source=true
+ENV npm_config_canvas_prebuilt=false
+
+# Install dependencies
+RUN npm ci --only=production --verbose
+
+# Copy source code and build files
+COPY . .
+
+# Compile TypeScript
+RUN npm run compile
+
+# Create directories for generated images
+RUN mkdir -p /app/generated_images && \
+    mkdir -p /app/generated_maps
+
+# Set environment variables for production
+ENV NODE_ENV=production
+# Enable Canvas map generation for Railway
+ENV FORCE_MAP_GENERATION=true
+ENV SKIP_MAP_GENERATION=false
+
+# Expose port (if needed for health checks)
+EXPOSE 3000
+
+# Start the bot
+CMD ["npm", "run", "start:prod"]

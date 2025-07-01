@@ -1,22 +1,29 @@
-# Railway用設定 - Dockerを使用してCanvas対応
+# Railway用設定 - Canvas対応の改善版
+[providers]
+node = "18"
+
 [phases.setup]
 nixPkgs = [
   "cairo",
-  "pango", 
+  "pango",
   "libjpeg",
   "giflib",
   "librsvg",
   "pixman",
-  "pkg-config"
+  "pkg-config",
+  "python3",
+  "gcc",
+  "make"
 ]
 
 [phases.build]
 cmds = [
-  "npm ci",
-  "npm rebuild canvas --build-from-source",
+  "npm ci --only=production --verbose",
+  "npm rebuild canvas --build-from-source --verbose",
   "npm run compile"
 ]
 
-# Dockerを優先使用する設定
 [variables]
+CANVAS_PREBUILT = "false"
 NIXPACKS_NO_CACHE = "1"
+NODE_ENV = "production"

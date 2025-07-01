@@ -10,7 +10,7 @@
     "compile": "tsc -p .",
     "docker:build": "docker build -t earthquake-discord-bot .",
     "docker:run": "docker-compose up -d",
-    "build": "npm rebuild canvas --build-from-source && tsc -p .",
+    "build": "npm install canvas --build-from-source && tsc -p .",
     "railway:build": "npm ci && npm rebuild canvas --build-from-source && npm run compile",
     "postinstall": "npm rebuild canvas --build-from-source || echo 'Canvas rebuild failed, continuing...'"
   },
@@ -29,6 +29,7 @@
   },
   "dependencies": {
     "@discordjs/rest": "^2.5.1",
+    "canvas": "^2.11.2",
     "d3": "^7.9.0",
     "d3-queue": "^3.0.7",
     "discord-api-types": "^0.38.12",
