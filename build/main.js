@@ -57,7 +57,14 @@ const path_1 = __importDefault(require("path"));
 const ws_1 = __importDefault(require("ws"));
 const eq_notify_1 = require("./eq_notify");
 const earthquake_1 = require("./utils/earthquake");
+const http = __importStar(require("http"));
 dotenv_1.default.config();
+// 環境変数とトークンの確認
+console.log('=== Bot起動開始 ===');
+console.log('NODE_ENV:', process.env.NODE_ENV);
+console.log('TOKEN確認:', process.env.TOKEN ? '✅ 設定済み' : '❌ 未設定');
+console.log('FORCE_MAP_GENERATION:', process.env.FORCE_MAP_GENERATION);
+console.log('SKIP_MAP_GENERATION:', process.env.SKIP_MAP_GENERATION);
 const client = new discord_js_1.Client({
     intents: [
         discord_js_1.GatewayIntentBits.Guilds,
@@ -74,9 +81,9 @@ function setBotPresence() {
     }
 }
 client.once('ready', () => {
-    console.log('Ready!');
+    console.log('✅ Discord Bot Ready!');
     if (client.user) {
-        console.log(client.user.tag);
+        console.log(`✅ ログイン成功: ${client.user.tag}`);
     }
     setBotPresence();
     // サーバー環境と地図生成サポート状況を確認
@@ -97,6 +104,33 @@ client.once('ready', () => {
         console.log(`Bot起動中！Ping: ${ping}ms / サーバー数: ${guildCount}`);
     }, 5 * 60 * 1000); // 5分ごと（ミリ秒に修正）
     (0, eq_notify_1.startEqAutoNotify)(client);
+});
+// ヘルスチェック用のHTTPサーバー（Railwayの監視用）
+const port = process.env.PORT || 3000;
+const server = http.createServer((req, res) => {
+    if (req.url === '/health') {
+        const health = {
+            status: 'ok',
+            timestamp: new Date().toISOString(),
+            botReady: client.isReady(),
+            uptime: process.uptime(),
+            environment: {
+                NODE_ENV: process.env.NODE_ENV,
+                hasToken: !!process.env.TOKEN,
+                skipMapGeneration: process.env.SKIP_MAP_GENERATION,
+                forceMapGeneration: process.env.FORCE_MAP_GENERATION
+            }
+        };
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(health, null, 2));
+    }
+    else {
+        res.writeHead(404);
+        res.end('Not Found');
+    }
+});
+server.listen(port, () => {
+    console.log(`✅ ヘルスチェックサーバー起動: http://localhost:${port}/health`);
 });
 // 再接続時にもステータスを再設定
 client.on('shardResume', () => {
@@ -122,7 +156,21 @@ client.on('interactionCreate', (interaction) => __awaiter(void 0, void 0, void 0
         yield getEqCommand.execute(interaction);
     }
 }));
-client.login(process.env.TOKEN);
+client.login(process.env.TOKEN)
+    .then(() => {
+    console.log('✅ Discord login attempt completed');
+})
+    .catch((error) => {
+    console.error('❌ Discord login failed:', error);
+    process.exit(1);
+});
+// エラーハンドリング
+client.on('error', (error) => {
+    console.error('Discord Client Error:', error);
+});
+client.on('warn', (warning) => {
+    console.warn('Discord Client Warning:', warning);
+});
 // 緊急地震速報の受信（例: P2P地震情報 WebSocket）
 const ws = new ws_1.default('wss://api.p2pquake.net/v2/ws');
 ws.on('open', () => {

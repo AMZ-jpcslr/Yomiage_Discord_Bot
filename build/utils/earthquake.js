@@ -397,7 +397,7 @@ function createEarthquakeEmbed(latestId_1) {
             .setDescription(`**${time.replace(/T/, ' ').replace(/\+09:00/, '')}ごろ、**\n` +
             intensityDescription +
             additionalInfo)
-            .addFields({ name: '震源', value: hypocenter !== '不明' ? hypocenter : '情報なし', inline: true }, { name: '規模', value: magnitude !== '不明' ? `M${magnitude}` : '情報なし', inline: true }, { name: '深さ', value: depth !== '不明' ? depth : '情報なし', inline: true });
+            .addFields({ name: '震源', value: hypocenter !== '不明' ? hypocenter : '情報なし', inline: true }, { name: '規模', value: (magnitude !== '不明' && magnitude !== '' && magnitude !== 'M速報値') ? `M${magnitude}` : '情報なし', inline: true }, { name: '深さ', value: depth !== '不明' ? depth : '情報なし', inline: true });
         // 最大震度が取得できた場合は追加フィールドとして表示
         if (maxScaleStr !== '不明' && maxScaleStr !== '') {
             embed.addFields({ name: '最大震度', value: maxScaleStr, inline: true });
@@ -476,6 +476,39 @@ function convertP2PtoJMAFormat(p2pData) {
         p2pRecord.magnitude ||
         p2pRecord.mag ||
         '不明';
+    // P2P地震情報の緊急地震速報（code: 551）の場合の特別処理
+    if (p2pRecord.code === 551) {
+        console.log('緊急地震速報のマグニチュード取得を試行');
+        // 緊急地震速報特有のフィールドから取得を試行
+        const eewMagnitude = p2pRecord.magnitude ||
+            p2pRecord.mag ||
+            p2pRecord.magunitude || // タイポの可能性も考慮
+            (earthquakeData === null || earthquakeData === void 0 ? void 0 : earthquakeData.magnitude) ||
+            (earthquakeData === null || earthquakeData === void 0 ? void 0 : earthquakeData.mag);
+        if (eewMagnitude && eewMagnitude !== '不明') {
+            magnitudeValue = eewMagnitude;
+            console.log(`緊急地震速報からマグニチュード取得: ${eewMagnitude}`);
+        }
+    }
+    // マグニチュード値の正規化処理
+    if (magnitudeValue && magnitudeValue !== '不明') {
+        const magStr = String(magnitudeValue);
+        // "M速報値"などの不適切な値を除去
+        if (magStr.includes('速報') || magStr.includes('未確定') || magStr.includes('調査中')) {
+            console.log(`無効なマグニチュード値を検出: "${magStr}" -> "不明"に変更`);
+            magnitudeValue = '不明';
+        }
+        // 数値のマグニチュードのみを許可
+        else if (!isNaN(Number(magStr)) && Number(magStr) > 0 && Number(magStr) <= 10) {
+            magnitudeValue = Number(magStr).toFixed(1); // 小数点1桁に統一
+            console.log(`マグニチュード値を正規化: ${magStr} -> ${magnitudeValue}`);
+        }
+        // その他の形式は"不明"とする
+        else {
+            console.log(`未対応のマグニチュード形式: "${magStr}" -> "不明"に変更`);
+            magnitudeValue = '不明';
+        }
+    }
     // 最大震度の取得（P2P API特有のフィールド名）
     let maxScaleValue = Number(earthquakeData.maxScale ||
         earthquakeData.max_scale ||
@@ -550,9 +583,7 @@ function convertP2PtoJMAFormat(p2pData) {
         if (hypocenterName === '不明') {
             hypocenterName = '緊急地震速報発表';
         }
-        if (magnitudeValue === '不明') {
-            magnitudeValue = '速報値';
-        }
+        // マグニチュードが取得できない場合は「不明」のままにして「速報値」は設定しない
         if (maxScaleValue === 0 && p2pRecord.maxScale) {
             // 別のフィールド名で最大震度が設定されている可能性
             const altMaxScale = Number(p2pRecord.maxScale);
@@ -569,6 +600,62 @@ function convertP2PtoJMAFormat(p2pData) {
             console.log(`- ${key}:`, p2pData[key]);
         }
     });
+    // P2P地震情報のareas配列を処理してJMA互換の震度観測データを作成
+    const intensityObservation = {
+        MaxInt: convertP2PMaxScaleToJMAFormat(Number(maxScaleValue) || 0)
+    };
+    // P2P地震情報のareasフィールドから地域震度情報を抽出
+    if (p2pRecord.areas && Array.isArray(p2pRecord.areas)) {
+        console.log('=== P2P areas配列から震度データを抽出 ===');
+        const areas = p2pRecord.areas;
+        const prefData = [];
+        areas.forEach((area, index) => {
+            console.log(`エリア${index + 1} 詳細:`, JSON.stringify(area, null, 2));
+            const areaName = String(area.name || area.region || area.area || `地域${index + 1}`);
+            const scaleFrom = Number(area.scaleFrom || 0);
+            const scaleTo = Number(area.scaleTo || area.scaleFrom || 0);
+            const maxAreaScale = Math.max(scaleFrom, scaleTo);
+            if (maxAreaScale > 0) {
+                // JMA形式の震度文字列に変換
+                const intensityStr = convertP2PMaxScaleToJMAFormat(maxAreaScale);
+                console.log(`エリア "${areaName}" 震度: ${maxAreaScale} -> ${intensityStr}`);
+                // JMA互換の都道府県・地域構造を作成
+                const prefEntry = {
+                    Name: areaName,
+                    Area: {
+                        Name: areaName,
+                        City: {
+                            Name: areaName,
+                            IntensityStation: {
+                                Name: areaName,
+                                Int: intensityStr,
+                                // P2Pの座標情報があれば使用、なければ地名から推定
+                                latlon: area.lat && area.lon ? {
+                                    lat: Number(area.lat),
+                                    lon: Number(area.lon)
+                                } : estimateP2PAreaCoordinates(areaName) || {
+                                    lat: 35.68, // デフォルト（東京）
+                                    lon: 139.69
+                                }
+                            }
+                        }
+                    }
+                };
+                prefData.push(prefEntry);
+            }
+        });
+        // P2P震度データがある場合は、JMA互換の震度観測構造に含める
+        if (prefData.length > 0) {
+            intensityObservation.Pref = prefData;
+            console.log(`✅ P2P から ${prefData.length} 個の地域震度データを変換`);
+        }
+        else {
+            console.log('⚠️  P2P areas配列から有効な震度データが見つかりませんでした');
+        }
+    }
+    else {
+        console.log('⚠️  P2P地震情報にareas配列が見つかりません - 震源のみの表示になります');
+    }
     // JMA API互換の構造を作成
     const jmaFormat = {
         Head: {
@@ -586,9 +673,7 @@ function convertP2PtoJMAFormat(p2pData) {
                 Magnitude: (magnitudeValue === null || magnitudeValue === void 0 ? void 0 : magnitudeValue.toString()) || '不明'
             },
             Intensity: {
-                Observation: {
-                    MaxInt: convertP2PMaxScaleToJMAFormat(Number(maxScaleValue) || 0)
-                }
+                Observation: intensityObservation
             }
         }
     };
@@ -615,7 +700,8 @@ function convertP2PMaxScaleToJMAFormat(p2pMaxScale) {
             return (p2pMaxScale === null || p2pMaxScale === void 0 ? void 0 : p2pMaxScale.toString()) || '不明';
     }
 }
-// P2P地震情報から地図生成用データを作成する関数
+// P2P地震情報から地図生成用データを作成する関数（非使用、今後削除予定）
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function createMapDataFromP2PInfo(detailData) {
     try {
         console.log('=== P2P地震情報から地図データを作成 ===');
@@ -640,7 +726,9 @@ function createMapDataFromP2PInfo(detailData) {
             magnitude: magnitude !== '不明' ? parseFloat(magnitude) || 0 : 0,
             depth: depth !== '不明' ? parseFloat(depth.replace('km', '')) || 10 : 10,
             hypocenter: hypocenter !== '不明' ? hypocenter : '不明',
-            maxScale: maxScale !== '不明' ? maxScale : '不明'
+            maxScale: maxScale !== '不明' ? maxScale : '不明',
+            source: 'P2P', // P2P地震情報のフラグを追加
+            isP2P: true // 追加フラグ
         };
         // AreaInfo型に合わせた地域情報を作成
         const areaInfo = {
@@ -813,44 +901,39 @@ function createEarthquakeEmbedFromData(detailData_1) {
                     console.error('❌ Canvas ライブラリが利用できません (P2P処理):', canvasError);
                     throw new Error('Canvas ライブラリが利用できないため、P2P地図生成をスキップします');
                 }
-                // P2P地震情報用の地図データを作成
-                const mapData = createMapDataFromP2PInfo(detailData);
-                if (mapData) {
-                    console.log('✅ P2P地図データの作成に成功:', mapData);
-                    const { earthquakeData, areaInfo } = mapData;
-                    console.log('P2P地図生成を実行中...');
-                    // タイムアウト付きで地図生成を実行
-                    const mapGenerationPromise = (0, mapGenerator_new_1.generateEarthquakeMap)(earthquakeData, areaInfo);
-                    const timeoutPromise = new Promise((_, reject) => {
-                        setTimeout(() => reject(new Error('P2P地図生成がタイムアウトしました (30秒)')), 30000);
+                // P2P地震情報も通常と同じ地図生成処理を使用
+                const { earthquakeData, areaInfo } = (0, mapGenerator_new_1.extractEarthquakeMapData)(detailData);
+                console.log('P2P地震データ抽出完了:', { earthquakeData, areaInfo });
+                // P2Pフラグを追加してP2P地震情報であることを識別
+                const p2pEarthquakeData = Object.assign(Object.assign({}, earthquakeData), { source: 'P2P', isP2P: true });
+                console.log('P2P地図生成を実行中...');
+                // タイムアウト付きで地図生成を実行（通常と同じ関数を使用）
+                const mapGenerationPromise = (0, mapGenerator_new_1.generateEarthquakeMap)(p2pEarthquakeData, areaInfo);
+                const timeoutPromise = new Promise((_, reject) => {
+                    setTimeout(() => reject(new Error('P2P地図生成がタイムアウトしました (30秒)')), 30000);
+                });
+                generatedMapPath = yield Promise.race([mapGenerationPromise, timeoutPromise]);
+                // 地図ファイルが実際に生成されたかを確認
+                if (generatedMapPath && fs.existsSync(generatedMapPath)) {
+                    const stats = fs.statSync(generatedMapPath);
+                    console.log(`✅ P2P地図ファイル生成成功: ${generatedMapPath} (${stats.size} bytes)`);
+                    // ファイルサイズの妥当性チェック
+                    if (stats.size > 8 * 1024 * 1024) {
+                        console.warn(`⚠️  P2P生成地図ファイルが大きすぎます: ${stats.size} bytes`);
+                        fs.unlinkSync(generatedMapPath);
+                        throw new Error('P2P生成地図ファイルが大きすぎます');
+                    }
+                    // 生成された画像をDiscordの添付ファイルとして準備
+                    const attachment = new discord_js_1.AttachmentBuilder(generatedMapPath, {
+                        name: 'earthquake_map.png'
                     });
-                    generatedMapPath = yield Promise.race([mapGenerationPromise, timeoutPromise]);
-                    // 地図ファイルが実際に生成されたかを確認
-                    if (generatedMapPath && fs.existsSync(generatedMapPath)) {
-                        const stats = fs.statSync(generatedMapPath);
-                        console.log(`✅ P2P地図ファイル生成成功: ${generatedMapPath} (${stats.size} bytes)`);
-                        // ファイルサイズの妥当性チェック
-                        if (stats.size > 8 * 1024 * 1024) {
-                            console.warn(`⚠️  P2P生成地図ファイルが大きすぎます: ${stats.size} bytes`);
-                            fs.unlinkSync(generatedMapPath);
-                            throw new Error('P2P生成地図ファイルが大きすぎます');
-                        }
-                        // 生成された画像をDiscordの添付ファイルとして準備
-                        const attachment = new discord_js_1.AttachmentBuilder(generatedMapPath, {
-                            name: 'earthquake_map.png'
-                        });
-                        attachments.push(attachment);
-                        mapGenerationSuccess = true;
-                        console.log('✅ P2P地震情報用地図画像の生成に成功:', generatedMapPath);
-                    }
-                    else {
-                        console.error('❌ P2P地図ファイルが生成されませんでした:', generatedMapPath);
-                        throw new Error('P2P地図ファイルの生成に失敗しました');
-                    }
+                    attachments.push(attachment);
+                    mapGenerationSuccess = true;
+                    console.log('✅ P2P地震情報用地図画像の生成に成功:', generatedMapPath);
                 }
                 else {
-                    console.error('❌ P2P地震情報から地図データの作成に失敗');
-                    throw new Error('P2P地震情報から地図データを作成できませんでした');
+                    console.error('❌ P2P地図ファイルが生成されませんでした:', generatedMapPath);
+                    throw new Error('P2P地図ファイルの生成に失敗しました');
                 }
             }
             catch (error) {
@@ -911,7 +994,7 @@ function createEarthquakeEmbedFromData(detailData_1) {
             .setDescription(`**${time.replace(/T/, ' ').replace(/\+09:00/, '').replace(/Z/, '')}ごろ、**\n` +
             intensityDescription +
             additionalInfo)
-            .addFields({ name: '震源', value: hypocenter !== '不明' ? hypocenter : '情報なし', inline: true }, { name: '規模', value: magnitude !== '不明' ? `M${magnitude}` : '情報なし', inline: true }, { name: '深さ', value: depth !== '不明' ? depth : '情報なし', inline: true });
+            .addFields({ name: '震源', value: hypocenter !== '不明' ? hypocenter : '情報なし', inline: true }, { name: '規模', value: (magnitude !== '不明' && magnitude !== '' && magnitude !== 'M速報値') ? `M${magnitude}` : '情報なし', inline: true }, { name: '深さ', value: depth !== '不明' ? depth : '情報なし', inline: true });
         // 最大震度が取得できた場合は追加フィールドとして表示
         if (maxScaleStr !== '不明' && maxScaleStr !== '') {
             embed.addFields({ name: '最大震度', value: maxScaleStr, inline: true });
@@ -1118,4 +1201,103 @@ function getServerEnvironmentInfo() {
         // Canvas関連（動的チェック）
         canvasAvailable: 'unknown' // 実行時にチェックされます
     };
+}
+// P2P地震情報のエリア名から座標を推定する関数
+function estimateP2PAreaCoordinates(areaName) {
+    // P2P地震情報でよく使われる地域名の座標マップ
+    const p2pAreaCoordinates = {
+        // 都道府県
+        '北海道': { lat: 43.1, lon: 143.0 },
+        '青森県': { lat: 40.8, lon: 140.7 },
+        '岩手県': { lat: 39.7, lon: 141.2 },
+        '宮城県': { lat: 38.3, lon: 140.9 },
+        '秋田県': { lat: 39.7, lon: 140.1 },
+        '山形県': { lat: 38.2, lon: 140.4 },
+        '福島県': { lat: 37.8, lon: 140.5 },
+        '茨城県': { lat: 36.3, lon: 140.4 },
+        '栃木県': { lat: 36.6, lon: 139.9 },
+        '群馬県': { lat: 36.4, lon: 139.0 },
+        '埼玉県': { lat: 36.0, lon: 139.6 },
+        '千葉県': { lat: 35.6, lon: 140.1 },
+        '東京都': { lat: 35.7, lon: 139.7 },
+        '神奈川県': { lat: 35.4, lon: 139.6 },
+        '新潟県': { lat: 37.9, lon: 139.0 },
+        '富山県': { lat: 36.7, lon: 137.2 },
+        '石川県': { lat: 36.6, lon: 136.6 },
+        '福井県': { lat: 36.1, lon: 136.2 },
+        '山梨県': { lat: 35.7, lon: 138.6 },
+        '長野県': { lat: 36.2, lon: 138.2 },
+        '岐阜県': { lat: 35.4, lon: 137.2 },
+        '静岡県': { lat: 34.9, lon: 138.4 },
+        '愛知県': { lat: 35.2, lon: 137.0 },
+        '三重県': { lat: 34.7, lon: 136.5 },
+        '滋賀県': { lat: 35.0, lon: 136.0 },
+        '京都府': { lat: 35.0, lon: 135.8 },
+        '大阪府': { lat: 34.7, lon: 135.5 },
+        '兵庫県': { lat: 34.7, lon: 135.2 },
+        '奈良県': { lat: 34.7, lon: 135.8 },
+        '和歌山県': { lat: 34.2, lon: 135.2 },
+        '鳥取県': { lat: 35.5, lon: 134.2 },
+        '島根県': { lat: 35.5, lon: 132.6 },
+        '岡山県': { lat: 34.7, lon: 133.9 },
+        '広島県': { lat: 34.4, lon: 132.5 },
+        '山口県': { lat: 34.2, lon: 131.5 },
+        '徳島県': { lat: 34.1, lon: 134.6 },
+        '香川県': { lat: 34.3, lon: 134.0 },
+        '愛媛県': { lat: 33.8, lon: 132.8 },
+        '高知県': { lat: 33.6, lon: 133.5 },
+        '福岡県': { lat: 33.6, lon: 130.4 },
+        '佐賀県': { lat: 33.2, lon: 130.3 },
+        '長崎県': { lat: 32.8, lon: 129.9 },
+        '熊本県': { lat: 32.8, lon: 130.7 },
+        '大分県': { lat: 33.2, lon: 131.6 },
+        '宮崎県': { lat: 32.0, lon: 131.4 },
+        '鹿児島県': { lat: 31.6, lon: 130.6 },
+        '沖縄県': { lat: 26.2, lon: 127.7 },
+        // 地方・地域名
+        '関東': { lat: 35.7, lon: 139.7 },
+        '関西': { lat: 34.7, lon: 135.5 },
+        '東北': { lat: 38.3, lon: 140.9 },
+        '九州': { lat: 33.6, lon: 130.4 },
+        '中部': { lat: 35.7, lon: 137.8 },
+        '中国': { lat: 34.6, lon: 133.0 },
+        '四国': { lat: 33.8, lon: 133.5 },
+        // 海域・特定地域
+        '三陸沖': { lat: 39.0, lon: 142.0 },
+        '福島沖': { lat: 37.0, lon: 141.5 },
+        '茨城沖': { lat: 36.0, lon: 141.0 },
+        '房総沖': { lat: 35.0, lon: 140.5 },
+        '相模湾': { lat: 35.2, lon: 139.3 },
+        '駿河湾': { lat: 35.0, lon: 138.6 },
+        '遠州灘': { lat: 34.6, lon: 137.8 },
+        '紀伊水道': { lat: 34.0, lon: 135.1 },
+        '瀬戸内海': { lat: 34.4, lon: 133.8 },
+        '日向灘': { lat: 32.0, lon: 132.0 },
+        '有明海': { lat: 32.9, lon: 130.4 },
+        '東シナ海': { lat: 30.0, lon: 126.0 },
+        '日本海': { lat: 37.0, lon: 135.0 },
+        '太平洋': { lat: 35.0, lon: 142.0 },
+        // トカラ列島周辺（P2Pでよく見られる）
+        'トカラ列島': { lat: 29.2, lon: 129.9 },
+        'トカラ列島近海': { lat: 29.2, lon: 129.9 },
+        '奄美大島': { lat: 28.5, lon: 130.0 },
+        '奄美大島近海': { lat: 28.5, lon: 130.0 },
+        '種子島': { lat: 30.5, lon: 131.0 },
+        '種子島近海': { lat: 30.5, lon: 131.0 },
+        '屋久島': { lat: 30.3, lon: 130.5 }
+    };
+    // 完全一致を優先
+    if (p2pAreaCoordinates[areaName]) {
+        console.log(`P2Pエリア "${areaName}" の座標を完全一致で取得:`, p2pAreaCoordinates[areaName]);
+        return p2pAreaCoordinates[areaName];
+    }
+    // 部分一致での検索
+    for (const [region, coords] of Object.entries(p2pAreaCoordinates)) {
+        if (areaName.includes(region) || region.includes(areaName)) {
+            console.log(`P2Pエリア "${areaName}" の座標を部分一致で取得 (${region}):`, coords);
+            return coords;
+        }
+    }
+    console.log(`P2Pエリア "${areaName}" の座標が見つかりませんでした`);
+    return null;
 }

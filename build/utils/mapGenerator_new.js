@@ -56,37 +56,9 @@ const fs = __importStar(require("fs"));
 const path = __importStar(require("path"));
 const jsdom_1 = require("jsdom");
 const sharp_1 = __importDefault(require("sharp"));
-// simplify-geojson can be required normally (CommonJS)
+// simplify-geojson can be imported normally (CommonJS)
+// eslint-disable-next-line @typescript-eslint/no-require-imports
 const simplify = require('simplify-geojson');
-// 震度画像URLを取得する関数（earthquake.tsと同じ）
-function getShindoImageUrl(maxScale) {
-    switch (String(maxScale)) {
-        case '1': return 'https://i.gyazo.com/4e7e465a1fadcdacb6b2d7ad77e26613/raw';
-        case '2': return 'https://i.gyazo.com/32a63f749d9a95b1bd4c610ac54c3639/raw';
-        case '3': return 'https://i.gyazo.com/af3a39eebdc321ae76eab731e60eb110/raw';
-        case '4': return 'https://i.gyazo.com/39351fbdd780e0db5a1b4b0dfd025/raw';
-        case '5-':
-        case '5弱': return 'https://i.gyazo.com/7bf28e3aff47cf4c4b8b20bcf9a33b29/raw';
-        case '5+':
-        case '5強': return 'https://i.gyazo.com/3cd7bab33cf0682e57ece10df2189988/raw';
-        case '6-':
-        case '6弱': return 'https://i.gyazo.com/77c3a1e02e8fcb0239afa5e4388146be/raw';
-        case '6+':
-        case '6強': return 'https://i.gyazo.com/8ca22b91e82cc578dffed126f3987fbb/raw';
-        case '7': return 'https://i.gyazo.com/74b556e4e716116e546e0638ab9e5db4/raw';
-        // 数値形式の場合も対応（旧形式）
-        case '10': return 'https://i.gyazo.com/4e7e465a1fadcdacb6b2d7ad77e26613/raw';
-        case '20': return 'https://i.gyazo.com/32a63f749d9a95b1bd4c610ac54c3639/raw';
-        case '30': return 'https://i.gyazo.com/af3a39eebdc321ae76eab731e60eb110/raw';
-        case '40': return 'https://i.gyazo.com/39351fbdd780e0db5a1b4b0dfd025/raw';
-        case '45': return 'https://i.gyazo.com/7bf28e3aff47cf4c4b8b20bcf9a33b29/raw';
-        case '50': return 'https://i.gyazo.com/3cd7bab33cf0682e57ece10df2189988/raw';
-        case '55': return 'https://i.gyazo.com/77c3a1e02e8fcb0239afa5e4388146be/raw';
-        case '60': return 'https://i.gyazo.com/8ca22b91e82cc578dffed126f3987fbb/raw';
-        case '70': return 'https://i.gyazo.com/74b556e4e716116e546e0638ab9e5db4/raw';
-        default: return undefined;
-    }
-}
 function generateEarthquakeMap(earthquakeData, areaInfo) {
     return __awaiter(this, void 0, void 0, function* () {
         var _a, _b, _c, _d;
@@ -133,38 +105,81 @@ function generateEarthquakeMap(earthquakeData, areaInfo) {
             let sum_latitude = epicenter[1];
             // Process areas if they exist (earthquake-alert/map-draw style)
             for (const area_key in area_info.areas) {
-                for (const element of area_info.areas[area_key]) {
-                    sum_longitude += element[0];
-                    sum_latitude += element[1];
-                    longitude = [Math.max(longitude[0], element[0]), Math.min(longitude[1], element[0])];
-                    latitude = [Math.max(latitude[0], element[1]), Math.min(latitude[1], element[1])];
-                    volume++;
+                const area = area_info.areas[area_key];
+                // area が配列であることを確認
+                if (Array.isArray(area)) {
+                    for (const element of area) {
+                        if (Array.isArray(element) && element.length >= 2) {
+                            sum_longitude += element[0];
+                            sum_latitude += element[1];
+                            longitude = [Math.max(longitude[0], element[0]), Math.min(longitude[1], element[0])];
+                            latitude = [Math.max(latitude[0], element[1]), Math.min(latitude[1], element[1])];
+                            volume++;
+                        }
+                    }
+                }
+                else if (area && typeof area === 'object') {
+                    // area がオブジェクトの場合は座標を直接取得を試行
+                    console.log(`エリア ${area_key} はオブジェクト形式:`, area);
+                    const areaObj = area;
+                    if (typeof areaObj.longitude === 'number' && typeof areaObj.latitude === 'number') {
+                        sum_longitude += areaObj.longitude;
+                        sum_latitude += areaObj.latitude;
+                        longitude = [Math.max(longitude[0], areaObj.longitude), Math.min(longitude[1], areaObj.longitude)];
+                        latitude = [Math.max(latitude[0], areaObj.latitude), Math.min(latitude[1], areaObj.latitude)];
+                        volume++;
+                    }
+                }
+                else {
+                    console.warn(`エリア ${area_key} の形式が不正です:`, typeof area, area);
                 }
             }
             const center = [sum_longitude / volume, sum_latitude / volume];
             const expansion_rate = longitude[0] - longitude[1] + latitude[0] - latitude[1];
             // Scale calculation (earthquake-alert/map-draw algorithm) - 震源周辺をより詳細に表示
             let _scale;
-            if (expansion_rate === 0) {
-                _scale = 8; // 単一震源の場合はさらにズームイン
-            }
-            else if (expansion_rate < 1) {
-                _scale = 6; // 小さな範囲の場合はより拡大
-            }
-            else if (expansion_rate < 3) {
-                _scale = 3;
-            }
-            else if (expansion_rate < 5) {
-                _scale = 2;
-            }
-            else if (expansion_rate < 7) {
-                _scale = 1.5;
-            }
-            else if (expansion_rate < 9) {
-                _scale = 1.2;
+            // P2P地震情報（緊急地震速報）の場合は広域を表示
+            const earthquakeDataRecord = earthquakeData;
+            const isP2PData = earthquakeDataRecord.source === 'P2P' || earthquakeDataRecord.isP2P === true;
+            if (isP2PData) {
+                // 緊急地震速報の場合は縮尺を小さくして広域を表示
+                console.log('P2P地震情報のため広域表示に調整');
+                if (expansion_rate === 0) {
+                    _scale = 3; // 単一震源でも広域表示
+                }
+                else if (expansion_rate < 3) {
+                    _scale = 2; // より広域
+                }
+                else if (expansion_rate < 7) {
+                    _scale = 1.5;
+                }
+                else {
+                    _scale = 1;
+                }
             }
             else {
-                _scale = 1;
+                // 通常の地震情報の場合
+                if (expansion_rate === 0) {
+                    _scale = 8; // 単一震源の場合はさらにズームイン
+                }
+                else if (expansion_rate < 1) {
+                    _scale = 6; // 小さな範囲の場合はより拡大
+                }
+                else if (expansion_rate < 3) {
+                    _scale = 3;
+                }
+                else if (expansion_rate < 5) {
+                    _scale = 2;
+                }
+                else if (expansion_rate < 7) {
+                    _scale = 1.5;
+                }
+                else if (expansion_rate < 9) {
+                    _scale = 1.2;
+                }
+                else {
+                    _scale = 1;
+                }
             }
             // Simplify geojson data with higher resolution for better map accuracy
             // 新しいprefectures.geojsonファイル用の最適化された解像度設定
@@ -317,23 +332,28 @@ function generateEarthquakeMap(earthquakeData, areaInfo) {
                 .attr('font-size', copyright.size)
                 .attr('font-family', copyright.font)
                 .style('fill', copyright.color);
-            // 震度数字を右上に表示する機能を追加
-            const maxScale = earthquakeData.maxScale;
-            console.log(`震度右上表示: maxScale = "${maxScale}", type = ${typeof maxScale}`);
+            // 震度数字を右上に表示する機能（無効化）
+            // const maxScale = earthquakeData.maxScale
+            // console.log(`震度右上表示: maxScale = "${maxScale}", type = ${typeof maxScale}`)
+            // 震度右上表示を無効化
+            /*
             if (maxScale && maxScale !== '不明' && maxScale !== '') {
                 // 震度数字を右上に大きく表示
-                let intensityText = maxScale.toString();
+                let intensityText = maxScale.toString()
+                
                 // 震度の文字列を正規化
                 if (intensityText.includes('弱')) {
-                    intensityText = intensityText.replace('弱', '-');
+                    intensityText = intensityText.replace('弱', '-')
+                } else if (intensityText.includes('強')) {
+                    intensityText = intensityText.replace('強', '+')
                 }
-                else if (intensityText.includes('強')) {
-                    intensityText = intensityText.replace('強', '+');
-                }
-                console.log(`震度右上表示: 表示する震度 = "${intensityText}"`);
-                const intensityFontSize = 100; // 大きなフォントサイズ
-                const rightMargin = 120;
-                const topMargin = 100;
+                
+                console.log(`震度右上表示: 表示する震度 = "${intensityText}"`)
+                
+                const intensityFontSize = 100 // 大きなフォントサイズ
+                const rightMargin = 120
+                const topMargin = 100
+                
                 // 背景の角丸四角形を描画（視認性向上のため）
                 svg.append('rect')
                     .attr('x', width - rightMargin - 80)
@@ -345,7 +365,8 @@ function generateEarthquakeMap(earthquakeData, areaInfo) {
                     .style('fill', 'rgba(0, 0, 0, 0.8)')
                     .style('stroke', '#ffffff')
                     .style('stroke-width', '4')
-                    .style('filter', 'drop-shadow(3px 3px 6px rgba(0,0,0,0.5))');
+                    .style('filter', 'drop-shadow(3px 3px 6px rgba(0,0,0,0.5))')
+                
                 // "震度"ラベルを描画
                 svg.append('text')
                     .text('震度')
@@ -356,7 +377,8 @@ function generateEarthquakeMap(earthquakeData, areaInfo) {
                     .attr('font-family', 'Arial Black, sans-serif')
                     .style('fill', '#ffffff')
                     .style('font-weight', 'bold')
-                    .style('text-shadow', '2px 2px 4px rgba(0,0,0,0.8)');
+                    .style('text-shadow', '2px 2px 4px rgba(0,0,0,0.8)')
+                
                 // 震度数字を描画
                 svg.append('text')
                     .text(intensityText)
@@ -367,8 +389,9 @@ function generateEarthquakeMap(earthquakeData, areaInfo) {
                     .attr('font-family', 'Arial Black, sans-serif')
                     .style('fill', '#ffffff')
                     .style('font-weight', 'bold')
-                    .style('text-shadow', '3px 3px 6px rgba(0,0,0,0.9)');
+                    .style('text-shadow', '3px 3px 6px rgba(0,0,0,0.9)')
             }
+            */
             // Get SVG as HTML string
             const svgHtml = document.body.innerHTML;
             // Convert SVG to PNG using Sharp
