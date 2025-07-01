@@ -1,18 +1,22 @@
-# ビルド済みファイル専用Dockerfile（最も安全）
+# 地震速報ボット - シンプル版 v5.0
 FROM node:18-alpine
 
 WORKDIR /app
 
-# package.jsonをコピー（本番依存関係のみ）
+# package.jsonをコピー
 COPY package*.json ./
 
-# 本番依存関係のみインストール
-RUN npm install --omit=dev
+# すべての依存関係をインストール（TypeScriptコンパイルのため）
+RUN npm install
 
-# ビルド済みファイルのみコピー
-COPY build/ ./build/
-COPY config/ ./config/
-COPY data/ ./data/
+# 残りのファイルをコピー
+COPY . .
+
+# TypeScriptコンパイル
+RUN npm run compile
+
+# 本番に不要なdevDependenciesを削除してサイズ削減
+RUN npm prune --production
 
 # 必要なディレクトリを作成
 RUN mkdir -p generated_images generated_maps
