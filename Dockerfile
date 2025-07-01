@@ -3,20 +3,17 @@ FROM node:18-alpine
 
 WORKDIR /app
 
-# package.jsonをコピー
+# package.jsonとpackage-lock.jsonをコピー
 COPY package*.json ./
 
-# すべての依存関係をインストール（TypeScriptコンパイルのため）
-RUN npm install
+# 依存関係をクリーンインストール（npm ciを使用）
+RUN npm ci
 
 # 残りのファイルをコピー
 COPY . .
 
 # TypeScriptコンパイル
 RUN npm run compile
-
-# 本番に不要なdevDependenciesを削除してサイズ削減
-RUN npm prune --production
 
 # 必要なディレクトリを作成
 RUN mkdir -p generated_images generated_maps
