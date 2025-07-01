@@ -442,7 +442,7 @@ export async function createEarthquakeEmbedFromP2PData(p2pData: P2PEarthquakeDat
 }
 
 // P2P地震情報データをJMA API互換形式に変換する関数
-function convertP2PtoJMAFormat(p2pData: P2PEarthquakeData): Record<string, unknown> {
+export function convertP2PtoJMAFormat(p2pData: P2PEarthquakeData): Record<string, unknown> {
     console.log('=== P2P→JMA変換を開始 ===')
     console.log('受信したP2Pデータの完全な構造:', JSON.stringify(p2pData, null, 2))
     
@@ -655,6 +655,20 @@ function convertP2PtoJMAFormat(p2pData: P2PEarthquakeData): Record<string, unkno
                 console.log(`エリア "${areaName}" 震度: ${maxAreaScale} -> ${intensityStr}`)
                 
                 // JMA互換の都道府県・地域構造を作成
+                const estimatedCoords = estimateP2PAreaCoordinates(areaName)
+                console.log(`エリア "${areaName}" 推定座標:`, estimatedCoords)
+                
+                // 座標情報の決定
+                const finalCoords = area.lat && area.lon ? {
+                    lat: Number(area.lat),
+                    lon: Number(area.lon)
+                } : estimatedCoords || {
+                    lat: 35.68, // デフォルト（東京）
+                    lon: 139.69
+                }
+                
+                console.log(`エリア "${areaName}" 最終座標:`, finalCoords)
+                
                 const prefEntry = {
                     Name: areaName,
                     Area: {
@@ -664,14 +678,7 @@ function convertP2PtoJMAFormat(p2pData: P2PEarthquakeData): Record<string, unkno
                             IntensityStation: {
                                 Name: areaName,
                                 Int: intensityStr,
-                                // P2Pの座標情報があれば使用、なければ地名から推定
-                                latlon: area.lat && area.lon ? {
-                                    lat: Number(area.lat),
-                                    lon: Number(area.lon)
-                                } : estimateP2PAreaCoordinates(areaName) || {
-                                    lat: 35.68, // デフォルト（東京）
-                                    lon: 139.69
-                                }
+                                latlon: finalCoords
                             }
                         }
                     }
@@ -684,7 +691,7 @@ function convertP2PtoJMAFormat(p2pData: P2PEarthquakeData): Record<string, unkno
         // P2P震度データがある場合は、JMA互換の震度観測構造に含める
         if (prefData.length > 0) {
             intensityObservation.Pref = prefData
-            console.log(`✅ P2P から ${prefData.length} 個の地域震度データを変換`)
+            console.log(`✅ P2P から ${prefData.length} 個の地域震度データを変換しました`)
         } else {
             console.log('⚠️  P2P areas配列から有効な震度データが見つかりませんでした')
         }

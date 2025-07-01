@@ -287,6 +287,10 @@ export async function generateEarthquakeMap(earthquakeData: EarthquakeData, area
         console.log(`総観測点数: ${totalStations}`)
         if (totalStations === 0) {
             console.warn('警告: 震度観測点データが見つかりませんでした。デフォルトで震源に表示します。')
+            console.warn('デバッグ: areas構造を確認:')
+            console.warn('  - areas keys:', Object.keys(area_info.areas))
+            console.warn('  - areas values:', Object.values(area_info.areas))
+            
             // 震度データがない場合、震源に最大震度を表示
             if (earthquakeData.maxScale && earthquakeData.maxScale !== '不明') {
                 const maxScaleText = earthquakeData.maxScale.toString()
@@ -656,7 +660,7 @@ export function extractEarthquakeMapData(detail: EarthquakeDetail): { earthquake
     
     // 気象庁XMLから震度データを抽出
     const intensityData = detail.Body?.Intensity?.Observation
-    console.log('震度観測データ:', JSON.stringify(intensityData, null, 2))
+    console.log('震度観測データのPrefフィールド:', intensityData?.Pref ? 'あり' : 'なし')
     
     if (intensityData && intensityData.Pref) {
         const prefectures = Array.isArray(intensityData.Pref) ? intensityData.Pref : [intensityData.Pref]
