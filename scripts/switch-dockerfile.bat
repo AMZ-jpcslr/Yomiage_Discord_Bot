@@ -67,7 +67,7 @@ echo WORKDIR /app >> Dockerfile
 echo COPY package*.json ./ >> Dockerfile
 echo ENV CANVAS_PREBUILT=false >> Dockerfile
 echo ENV npm_config_build_from_source=true >> Dockerfile
-echo RUN npm ci --only=production --verbose >> Dockerfile
+echo RUN npm install --verbose >> Dockerfile
 echo COPY . . >> Dockerfile
 echo RUN npm run compile >> Dockerfile
 echo RUN mkdir -p /app/generated_images ^&^& mkdir -p /app/generated_maps >> Dockerfile

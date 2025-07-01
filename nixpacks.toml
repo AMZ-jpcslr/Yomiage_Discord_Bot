@@ -18,7 +18,7 @@ nixPkgs = [
 
 [phases.build]
 cmds = [
-  "npm ci --only=production --verbose",
+  "npm install --verbose",
   "npm rebuild canvas --build-from-source --verbose",
   "npm run compile"
 ]

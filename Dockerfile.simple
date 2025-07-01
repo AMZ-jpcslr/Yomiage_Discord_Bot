@@ -14,8 +14,8 @@ WORKDIR /app
 # package.jsonをコピー
 COPY package*.json ./
 
-# 依存関係をインストール（Canvasなし）
-RUN npm ci --only=production
+# 依存関係をインストール
+RUN npm install
 
 # ソースコードをコピー
 COPY . .

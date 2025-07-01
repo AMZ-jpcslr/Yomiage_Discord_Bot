@@ -82,7 +82,7 @@ ENV npm_config_build_from_source=true
 ENV npm_config_canvas_prebuilt=false
 
 # Install dependencies with verbose logging
-RUN npm ci --only=production --verbose
+RUN npm install --verbose
 
 # Rebuild Canvas specifically to ensure it's properly built
 RUN npm rebuild canvas --build-from-source --verbose
@@ -160,7 +160,7 @@ ENV npm_config_build_from_source=true
 ENV npm_config_canvas_prebuilt=false
 
 # Install dependencies
-RUN npm ci --only=production --verbose
+RUN npm install --verbose
 
 # Copy source code and build files
 COPY . .
