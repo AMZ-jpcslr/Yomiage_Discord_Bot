@@ -10,7 +10,7 @@ import path from 'path'
 import { TextChannel } from 'discord.js'
 import WebSocket from 'ws'
 import { startEqAutoNotify } from './eq_notify'
-import { processP2PEarthquakeAlert } from './utils/earthquake'
+import { processP2PEarthquakeAlert, checkServerEnvironmentSupport, getServerEnvironmentInfo } from './utils/earthquake'
 
 dotenv.config()
 
@@ -37,6 +37,20 @@ client.once('ready', () => {
         console.log(client.user.tag)
     }
     setBotPresence()
+
+    // サーバー環境と地図生成サポート状況を確認
+    const envSupport = checkServerEnvironmentSupport()
+    const envInfo = getServerEnvironmentInfo()
+    
+    console.log('=== 環境情報 ===')
+    console.log(`サーバー環境: ${envSupport.isServerEnvironment}`)
+    console.log(`地図生成可能: ${envSupport.canGenerateMap}`)
+    console.log('詳細環境情報:', JSON.stringify(envInfo, null, 2))
+    
+    if (envSupport.recommendations.length > 0) {
+        console.log('=== 推奨設定 ===')
+        envSupport.recommendations.forEach(rec => console.log(`💡 ${rec}`))
+    }
 
     // 5分ごとにPing値とサーバー数をターミナルに出力
     setInterval(() => {

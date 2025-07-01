@@ -46,6 +46,8 @@ exports.createEarthquakeEmbed = createEarthquakeEmbed;
 exports.createEarthquakeEmbedFromP2PData = createEarthquakeEmbedFromP2PData;
 exports.findJMAEarthquakeId = findJMAEarthquakeId;
 exports.processP2PEarthquakeAlert = processP2PEarthquakeAlert;
+exports.checkServerEnvironmentSupport = checkServerEnvironmentSupport;
+exports.getServerEnvironmentInfo = getServerEnvironmentInfo;
 const discord_js_1 = require("discord.js");
 const mapGenerator_new_1 = require("./mapGenerator_new");
 const fs = __importStar(require("fs"));
@@ -234,6 +236,7 @@ function getAdditionalText(detailData) {
 // 地震情報の埋め込みを作成する共通関数
 function createEarthquakeEmbed(latestId_1) {
     return __awaiter(this, arguments, void 0, function* (latestId, isAutoNotify = false) {
+        var _a;
         const detailRes = yield fetch(`https://www.jma.go.jp/bosai/quake/data/${latestId}`);
         const detail = yield detailRes.json();
         const detailData = detail;
@@ -273,27 +276,100 @@ function createEarthquakeEmbed(latestId_1) {
         // 独自の地震マップ画像を生成
         let generatedMapPath = null;
         const attachments = [];
+        // サーバー環境の検出
+        const isServerEnvironment = process.env.NODE_ENV === 'production' ||
+            process.env.RAILWAY_ENVIRONMENT ||
+            process.env.HEROKU_APP_NAME ||
+            process.env.VERCEL ||
+            !((_a = process.env.HOME) === null || _a === void 0 ? void 0 : _a.includes('Users')); // Windows以外の環境
         // サーバー環境では地震マップ生成をスキップするオプション
-        const skipMapGeneration = process.env.SKIP_MAP_GENERATION === 'true';
+        const skipMapGeneration = process.env.SKIP_MAP_GENERATION === 'true' ||
+            (isServerEnvironment && process.env.FORCE_MAP_GENERATION !== 'true');
+        console.log(`=== 環境情報 ===`);
+        console.log(`サーバー環境: ${isServerEnvironment}`);
+        console.log(`地図生成スキップ: ${skipMapGeneration}`);
+        console.log(`NODE_ENV: ${process.env.NODE_ENV}`);
+        console.log(`SKIP_MAP_GENERATION: ${process.env.SKIP_MAP_GENERATION}`);
+        console.log(`FORCE_MAP_GENERATION: ${process.env.FORCE_MAP_GENERATION}`);
         if (!skipMapGeneration) {
             try {
+                console.log('=== 地図生成処理開始 ===');
+                // Canvas ライブラリの利用可能性をチェック
+                try {
+                    yield Promise.resolve().then(() => __importStar(require('canvas')));
+                    console.log('✅ Canvas ライブラリが利用可能');
+                }
+                catch (canvasError) {
+                    console.error('❌ Canvas ライブラリが利用できません:', canvasError);
+                    throw new Error('Canvas ライブラリが利用できないため、地図生成をスキップします');
+                }
+                // ディスク容量とメモリ使用量をチェック
+                const freeMemory = process.memoryUsage();
+                console.log(`メモリ使用量: ${JSON.stringify(freeMemory)}`);
                 const { earthquakeData, areaInfo } = (0, mapGenerator_new_1.extractEarthquakeMapData)(detail);
-                generatedMapPath = yield (0, mapGenerator_new_1.generateEarthquakeMap)(earthquakeData, areaInfo);
-                // 生成された画像をDiscordの添付ファイルとして準備
-                const attachment = new discord_js_1.AttachmentBuilder(generatedMapPath, {
-                    name: 'earthquake_map.png'
+                console.log('地震データ抽出完了:', { earthquakeData, areaInfo });
+                // タイムアウト付きで地図生成を実行
+                const mapGenerationPromise = (0, mapGenerator_new_1.generateEarthquakeMap)(earthquakeData, areaInfo);
+                const timeoutPromise = new Promise((_, reject) => {
+                    setTimeout(() => reject(new Error('地図生成がタイムアウトしました (30秒)')), 30000);
                 });
-                attachments.push(attachment);
-                console.log('独自地震マップ画像を生成しました:', generatedMapPath);
+                generatedMapPath = yield Promise.race([mapGenerationPromise, timeoutPromise]);
+                // 生成されたファイルの存在確認
+                if (generatedMapPath && fs.existsSync(generatedMapPath)) {
+                    const stats = fs.statSync(generatedMapPath);
+                    console.log(`✅ 地図ファイル生成成功: ${generatedMapPath} (${stats.size} bytes)`);
+                    // ファイルサイズの妥当性チェック（8MBを超える場合は異常）
+                    if (stats.size > 8 * 1024 * 1024) {
+                        console.warn(`⚠️  生成された地図ファイルが大きすぎます: ${stats.size} bytes`);
+                        fs.unlinkSync(generatedMapPath); // 異常に大きなファイルを削除
+                        throw new Error('生成された地図ファイルが大きすぎます');
+                    }
+                    // 生成された画像をDiscordの添付ファイルとして準備
+                    const attachment = new discord_js_1.AttachmentBuilder(generatedMapPath, {
+                        name: 'earthquake_map.png'
+                    });
+                    attachments.push(attachment);
+                    console.log('✅ 独自地震マップ画像を生成しました:', generatedMapPath);
+                }
+                else {
+                    console.error('❌ 地図ファイルが生成されませんでした:', generatedMapPath);
+                    throw new Error('地図ファイルの生成に失敗しました');
+                }
             }
             catch (error) {
-                console.error('地震マップ画像生成エラー:', error);
-                console.log('地震マップなしで通知を続行します');
+                console.error('❌ 地震マップ画像生成エラー:', error);
+                console.error('エラーの詳細:', error instanceof Error ? error.stack : String(error));
+                // サーバー環境での一般的な問題を特定
+                if (error instanceof Error) {
+                    if (error.message.includes('Canvas') || error.message.includes('cairo')) {
+                        console.error('🔧 Canvas ライブラリまたはシステム依存関係の問題です');
+                        console.error('解決方法: サーバーにCanvas関連パッケージをインストールしてください');
+                    }
+                    else if (error.message.includes('permission') || error.message.includes('EACCES')) {
+                        console.error('🔧 ファイルシステムの権限問題です');
+                        console.error('解決方法: generated_imagesディレクトリの書き込み権限を確認してください');
+                    }
+                    else if (error.message.includes('timeout') || error.message.includes('タイムアウト')) {
+                        console.error('🔧 処理時間制限に達しました');
+                        console.error('解決方法: サーバーのCPU/メモリリソースを増強してください');
+                    }
+                    else if (error.message.includes('memory') || error.message.includes('out of memory')) {
+                        console.error('🔧 メモリ不足です');
+                        console.error('解決方法: サーバーのメモリ容量を増やしてください');
+                    }
+                }
+                console.log('⚠️  地震マップなしで通知を続行します');
                 // エラーが発生してもボットの動作を継続
             }
         }
         else {
-            console.log('地震マップ生成はスキップされました（SKIP_MAP_GENERATION=true）');
+            if (isServerEnvironment && process.env.FORCE_MAP_GENERATION !== 'true') {
+                console.log('🖥️  サーバー環境のため地震マップ生成をスキップしました');
+                console.log('💡 強制的に地図生成を行う場合は環境変数 FORCE_MAP_GENERATION=true を設定してください');
+            }
+            else {
+                console.log('⏭️  地震マップ生成はスキップされました（SKIP_MAP_GENERATION=true）');
+            }
         }
         // 埋め込み作成
         const title = isAutoNotify ? '🚨 【自動通知】地震情報' : '🚨 地震情報';
@@ -689,6 +765,7 @@ function getApproximateCoordinates(hypocenterName) {
 // データから直接埋め込みを作成する関数（JMA APIフェッチなし）
 function createEarthquakeEmbedFromData(detailData_1) {
     return __awaiter(this, arguments, void 0, function* (detailData, isAutoNotify = false) {
+        var _a;
         const time = safeGet(detailData, 'Head.ReportDateTime');
         const hypocenter = safeGet(detailData, 'Body.Earthquake.Hypocenter.Area.Name');
         const magnitude = safeGet(detailData, 'Body.Earthquake.Magnitude');
@@ -712,21 +789,52 @@ function createEarthquakeEmbedFromData(detailData_1) {
         let generatedMapPath = null;
         const attachments = [];
         let mapGenerationSuccess = false;
+        // サーバー環境の検出
+        const isServerEnvironment = process.env.NODE_ENV === 'production' ||
+            process.env.RAILWAY_ENVIRONMENT ||
+            process.env.HEROKU_APP_NAME ||
+            process.env.VERCEL ||
+            !((_a = process.env.HOME) === null || _a === void 0 ? void 0 : _a.includes('Users')); // Windows以外の環境
         // サーバー環境では地震マップ生成をスキップするオプション
-        const skipMapGeneration = process.env.SKIP_MAP_GENERATION === 'true';
+        const skipMapGeneration = process.env.SKIP_MAP_GENERATION === 'true' ||
+            (isServerEnvironment && process.env.FORCE_MAP_GENERATION !== 'true');
+        console.log(`=== P2P地震情報処理の環境情報 ===`);
+        console.log(`サーバー環境: ${isServerEnvironment}`);
+        console.log(`地図生成スキップ: ${skipMapGeneration}`);
         if (!skipMapGeneration) {
             console.log('=== P2P地震情報用地図生成を開始 ===');
             try {
+                // Canvas ライブラリの利用可能性をチェック
+                try {
+                    yield Promise.resolve().then(() => __importStar(require('canvas')));
+                    console.log('✅ Canvas ライブラリが利用可能 (P2P処理)');
+                }
+                catch (canvasError) {
+                    console.error('❌ Canvas ライブラリが利用できません (P2P処理):', canvasError);
+                    throw new Error('Canvas ライブラリが利用できないため、P2P地図生成をスキップします');
+                }
                 // P2P地震情報用の地図データを作成
                 const mapData = createMapDataFromP2PInfo(detailData);
                 if (mapData) {
-                    console.log('地図データの作成に成功:', mapData);
+                    console.log('✅ P2P地図データの作成に成功:', mapData);
                     const { earthquakeData, areaInfo } = mapData;
-                    console.log('地図生成を実行中...');
-                    // 型を適切にキャストして地図生成関数に渡す
-                    generatedMapPath = yield (0, mapGenerator_new_1.generateEarthquakeMap)(earthquakeData, areaInfo);
+                    console.log('P2P地図生成を実行中...');
+                    // タイムアウト付きで地図生成を実行
+                    const mapGenerationPromise = (0, mapGenerator_new_1.generateEarthquakeMap)(earthquakeData, areaInfo);
+                    const timeoutPromise = new Promise((_, reject) => {
+                        setTimeout(() => reject(new Error('P2P地図生成がタイムアウトしました (30秒)')), 30000);
+                    });
+                    generatedMapPath = yield Promise.race([mapGenerationPromise, timeoutPromise]);
                     // 地図ファイルが実際に生成されたかを確認
                     if (generatedMapPath && fs.existsSync(generatedMapPath)) {
+                        const stats = fs.statSync(generatedMapPath);
+                        console.log(`✅ P2P地図ファイル生成成功: ${generatedMapPath} (${stats.size} bytes)`);
+                        // ファイルサイズの妥当性チェック
+                        if (stats.size > 8 * 1024 * 1024) {
+                            console.warn(`⚠️  P2P生成地図ファイルが大きすぎます: ${stats.size} bytes`);
+                            fs.unlinkSync(generatedMapPath);
+                            throw new Error('P2P生成地図ファイルが大きすぎます');
+                        }
                         // 生成された画像をDiscordの添付ファイルとして準備
                         const attachment = new discord_js_1.AttachmentBuilder(generatedMapPath, {
                             name: 'earthquake_map.png'
@@ -736,22 +844,46 @@ function createEarthquakeEmbedFromData(detailData_1) {
                         console.log('✅ P2P地震情報用地図画像の生成に成功:', generatedMapPath);
                     }
                     else {
-                        console.error('❌ 地図ファイルが生成されませんでした:', generatedMapPath);
-                        generatedMapPath = null;
+                        console.error('❌ P2P地図ファイルが生成されませんでした:', generatedMapPath);
+                        throw new Error('P2P地図ファイルの生成に失敗しました');
                     }
                 }
                 else {
                     console.error('❌ P2P地震情報から地図データの作成に失敗');
+                    throw new Error('P2P地震情報から地図データを作成できませんでした');
                 }
             }
             catch (error) {
                 console.error('❌ P2P地震マップ画像生成エラー:', error);
-                console.error('エラー詳細:', error instanceof Error ? error.stack : error);
+                console.error('エラー詳細:', error instanceof Error ? error.stack : String(error));
+                // サーバー環境での一般的な問題を特定
+                if (error instanceof Error) {
+                    if (error.message.includes('Canvas') || error.message.includes('cairo')) {
+                        console.error('🔧 Canvas ライブラリまたはシステム依存関係の問題です (P2P処理)');
+                    }
+                    else if (error.message.includes('permission') || error.message.includes('EACCES')) {
+                        console.error('🔧 ファイルシステムの権限問題です (P2P処理)');
+                    }
+                    else if (error.message.includes('timeout') || error.message.includes('タイムアウト')) {
+                        console.error('🔧 P2P処理時間制限に達しました');
+                    }
+                    else if (error.message.includes('memory') || error.message.includes('out of memory')) {
+                        console.error('🔧 P2Pメモリ不足です');
+                    }
+                }
+                console.log('⚠️  P2P地震マップなしで通知を続行します');
                 generatedMapPath = null;
+                mapGenerationSuccess = false;
             }
         }
         else {
-            console.log('⏭️  地震マップ生成はスキップされました（SKIP_MAP_GENERATION=true）');
+            if (isServerEnvironment && process.env.FORCE_MAP_GENERATION !== 'true') {
+                console.log('🖥️  サーバー環境のためP2P地震マップ生成をスキップしました');
+                console.log('💡 強制的にP2P地図生成を行う場合は環境変数 FORCE_MAP_GENERATION=true を設定してください');
+            }
+            else {
+                console.log('⏭️  P2P地震マップ生成はスキップされました（SKIP_MAP_GENERATION=true）');
+            }
         }
         // 地図生成結果をログ出力
         console.log(`=== 地図生成結果 ===`);
@@ -937,4 +1069,53 @@ function processP2PEarthquakeAlert(p2pData) {
             return null;
         }
     });
+}
+// サーバー環境での地図生成サポート関数
+function checkServerEnvironmentSupport() {
+    const isServerEnvironment = !!(process.env.NODE_ENV === 'production' ||
+        process.env.RAILWAY_ENVIRONMENT ||
+        process.env.HEROKU_APP_NAME ||
+        process.env.VERCEL ||
+        (process.env.HOME && !process.env.HOME.includes('Users')));
+    const forceMapGeneration = process.env.FORCE_MAP_GENERATION === 'true';
+    const skipMapGeneration = process.env.SKIP_MAP_GENERATION === 'true';
+    const canGenerateMap = !skipMapGeneration && (forceMapGeneration || !isServerEnvironment);
+    const recommendations = [];
+    if (isServerEnvironment && !forceMapGeneration) {
+        recommendations.push('サーバー環境で地図生成を有効にするには環境変数 FORCE_MAP_GENERATION=true を設定してください');
+        recommendations.push('Canvas ライブラリがサーバーにインストールされていることを確認してください');
+        recommendations.push('generated_images ディレクトリの書き込み権限を確認してください');
+    }
+    if (skipMapGeneration) {
+        recommendations.push('SKIP_MAP_GENERATION=true が設定されているため地図生成が無効になっています');
+    }
+    return {
+        isServerEnvironment,
+        canGenerateMap,
+        recommendations
+    };
+}
+// サーバー環境の詳細情報を取得する関数
+function getServerEnvironmentInfo() {
+    return {
+        nodeEnv: process.env.NODE_ENV,
+        platform: process.platform,
+        arch: process.arch,
+        nodeVersion: process.version,
+        memoryUsage: process.memoryUsage(),
+        uptime: process.uptime(),
+        cwd: process.cwd(),
+        // 一般的なサーバー環境の環境変数
+        railway: !!process.env.RAILWAY_ENVIRONMENT,
+        heroku: !!process.env.HEROKU_APP_NAME,
+        vercel: !!process.env.VERCEL,
+        render: !!process.env.RENDER,
+        // 地図生成関連の設定
+        skipMapGeneration: process.env.SKIP_MAP_GENERATION,
+        forceMapGeneration: process.env.FORCE_MAP_GENERATION,
+        // ファイルシステム
+        hasGeneratedImages: fs.existsSync('generated_images'),
+        // Canvas関連（動的チェック）
+        canvasAvailable: 'unknown' // 実行時にチェックされます
+    };
 }
