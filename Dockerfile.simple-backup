@@ -3,11 +3,11 @@ FROM node:18-alpine
 
 WORKDIR /app
 
-# package.jsonをコピー（本番依存関係のみ）
+# package.jsonをコピー
 COPY package*.json ./
 
-# 本番依存関係のみインストール
-RUN npm install --omit=dev
+# すべての依存関係をインストール
+RUN npm install
 
 # ビルド済みファイルのみコピー
 COPY build/ ./build/
