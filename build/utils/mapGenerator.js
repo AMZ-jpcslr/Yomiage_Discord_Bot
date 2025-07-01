@@ -60,12 +60,19 @@ const sharp_1 = __importDefault(require("sharp"));
 const simplify = require('simplify-geojson');
 // サーバー環境対応のための環境変数設定
 if (process.env.NODE_ENV === 'production') {
-    // Fontconfig設定を無効化
-    process.env.FONTCONFIG_PATH = '/dev/null';
-    process.env.FONTCONFIG_FILE = '/dev/null';
+    // Fontconfig設定を無効化（より安全な方法）
+    process.env.FONTCONFIG_PATH = '';
+    process.env.FONTCONFIG_FILE = '';
+    delete process.env.FONTCONFIG_PATH;
+    delete process.env.FONTCONFIG_FILE;
     // Sharp のメモリ使用量を制限
-    sharp_1.default.cache({ memory: 50 });
-    sharp_1.default.concurrency(1);
+    try {
+        sharp_1.default.cache({ memory: 50 });
+        sharp_1.default.concurrency(1);
+    }
+    catch (err) {
+        console.warn('Sharp configuration warning:', err);
+    }
 }
 function generateEarthquakeMap(earthquakeData, areaInfo) {
     return __awaiter(this, void 0, void 0, function* () {
@@ -278,10 +285,11 @@ function generateEarthquakeMap(earthquakeData, areaInfo) {
             // Convert SVG to PNG with server-safe configuration
             try {
                 // サーバー環境での安全なSharp設定
-                yield (0, sharp_1.default)(Buffer.from(svgHtml), {
+                const sharpInstance = (0, sharp_1.default)(Buffer.from(svgHtml), {
                     density: 150,
                     limitInputPixels: false
-                })
+                });
+                yield sharpInstance
                     .png({
                     compressionLevel: 6,
                     quality: 80,
@@ -291,10 +299,20 @@ function generateEarthquakeMap(earthquakeData, areaInfo) {
             }
             catch (sharpError) {
                 console.error('Sharp conversion error:', sharpError);
-                // フォールバック: 基本的なPNG出力を試行
-                yield (0, sharp_1.default)(Buffer.from(svgHtml))
-                    .png()
-                    .toFile(filepath);
+                // フォールバック1: より基本的な設定で試行
+                try {
+                    yield (0, sharp_1.default)(Buffer.from(svgHtml))
+                        .png({ force: true })
+                        .toFile(filepath);
+                }
+                catch (fallbackError) {
+                    console.error('Sharp fallback error:', fallbackError);
+                    // フォールバック2: SVGファイルとして保存
+                    const svgFilepath = filepath.replace('.png', '.svg');
+                    fs.writeFileSync(svgFilepath, svgHtml);
+                    console.log('SVGファイルとして保存:', svgFilepath);
+                    throw new Error('PNG変換に失敗しました。SVGファイルのみ利用可能です。');
+                }
             }
             console.log('Generated earthquake map:', filepath);
             return filepath;

@@ -58,6 +58,35 @@ const jsdom_1 = require("jsdom");
 const sharp_1 = __importDefault(require("sharp"));
 // simplify-geojson can be required normally (CommonJS)
 const simplify = require('simplify-geojson');
+// 震度画像URLを取得する関数（earthquake.tsと同じ）
+function getShindoImageUrl(maxScale) {
+    switch (String(maxScale)) {
+        case '1': return 'https://i.gyazo.com/4e7e465a1fadcdacb6b2d7ad77e26613/raw';
+        case '2': return 'https://i.gyazo.com/32a63f749d9a95b1bd4c610ac54c3639/raw';
+        case '3': return 'https://i.gyazo.com/af3a39eebdc321ae76eab731e60eb110/raw';
+        case '4': return 'https://i.gyazo.com/39351fbdd780e0db5a1b4b0dfd025/raw';
+        case '5-':
+        case '5弱': return 'https://i.gyazo.com/7bf28e3aff47cf4c4b8b20bcf9a33b29/raw';
+        case '5+':
+        case '5強': return 'https://i.gyazo.com/3cd7bab33cf0682e57ece10df2189988/raw';
+        case '6-':
+        case '6弱': return 'https://i.gyazo.com/77c3a1e02e8fcb0239afa5e4388146be/raw';
+        case '6+':
+        case '6強': return 'https://i.gyazo.com/8ca22b91e82cc578dffed126f3987fbb/raw';
+        case '7': return 'https://i.gyazo.com/74b556e4e716116e546e0638ab9e5db4/raw';
+        // 数値形式の場合も対応（旧形式）
+        case '10': return 'https://i.gyazo.com/4e7e465a1fadcdacb6b2d7ad77e26613/raw';
+        case '20': return 'https://i.gyazo.com/32a63f749d9a95b1bd4c610ac54c3639/raw';
+        case '30': return 'https://i.gyazo.com/af3a39eebdc321ae76eab731e60eb110/raw';
+        case '40': return 'https://i.gyazo.com/39351fbdd780e0db5a1b4b0dfd025/raw';
+        case '45': return 'https://i.gyazo.com/7bf28e3aff47cf4c4b8b20bcf9a33b29/raw';
+        case '50': return 'https://i.gyazo.com/3cd7bab33cf0682e57ece10df2189988/raw';
+        case '55': return 'https://i.gyazo.com/77c3a1e02e8fcb0239afa5e4388146be/raw';
+        case '60': return 'https://i.gyazo.com/8ca22b91e82cc578dffed126f3987fbb/raw';
+        case '70': return 'https://i.gyazo.com/74b556e4e716116e546e0638ab9e5db4/raw';
+        default: return undefined;
+    }
+}
 function generateEarthquakeMap(earthquakeData, areaInfo) {
     return __awaiter(this, void 0, void 0, function* () {
         var _a, _b, _c, _d;
@@ -114,22 +143,22 @@ function generateEarthquakeMap(earthquakeData, areaInfo) {
             }
             const center = [sum_longitude / volume, sum_latitude / volume];
             const expansion_rate = longitude[0] - longitude[1] + latitude[0] - latitude[1];
-            // Scale calculation (earthquake-alert/map-draw algorithm)
+            // Scale calculation (earthquake-alert/map-draw algorithm) - 震源周辺をより詳細に表示
             let _scale;
             if (expansion_rate === 0) {
-                _scale = 1;
+                _scale = 8; // 単一震源の場合はさらにズームイン
             }
             else if (expansion_rate < 1) {
-                _scale = 3;
+                _scale = 6; // 小さな範囲の場合はより拡大
             }
             else if (expansion_rate < 3) {
-                _scale = 1.75;
+                _scale = 3;
             }
             else if (expansion_rate < 5) {
-                _scale = 1.4;
+                _scale = 2;
             }
             else if (expansion_rate < 7) {
-                _scale = 1.2;
+                _scale = 1.5;
             }
             else if (expansion_rate < 9) {
                 _scale = 1.2;
@@ -138,12 +167,14 @@ function generateEarthquakeMap(earthquakeData, areaInfo) {
                 _scale = 1;
             }
             // Simplify geojson data with higher resolution for better map accuracy
-            const data = simplify(mapData, Math.min(resolution, 0.01));
-            // Setup map projection (earthquake-alert/map-draw style)
+            // 新しいprefectures.geojsonファイル用の最適化された解像度設定
+            const data = simplify(mapData, Math.min(resolution * 0.1, 0.001));
+            // Setup map projection (earthquake-alert/map-draw style) with improved accuracy
             const aProjection = d3.geoMercator()
                 .center(center)
                 .translate([width / 2, height / 2])
-                .scale(def_scale * _scale);
+                .scale(def_scale * _scale)
+                .precision(0.1); // 投影精度を向上
             const geoPath = d3.geoPath()
                 .projection(aProjection);
             // Create SVG (earthquake-alert/map-draw style)
@@ -159,29 +190,34 @@ function generateEarthquakeMap(earthquakeData, areaInfo) {
                 .attr('scale', aProjection.scale())
                 .attr('encoding', 'utf-8')
                 .style('background-color', sea_color);
-            // Draw map with better stroke settings for clarity
+            // Draw map with better stroke settings for improved clarity and detail
+            // 新しいprefectures.geojsonに最適化された描画設定
             svg.append('path')
                 .datum(data)
                 .attr('d', geoPath)
                 .attr('stroke-width', map_stroke)
                 .attr('stroke-linejoin', 'round')
                 .attr('stroke-linecap', 'round')
+                .attr('stroke-miterlimit', 10)
+                .attr('vector-effect', 'non-scaling-stroke') // ズーム時の線幅維持
                 .style('fill', land_color)
-                .style('stroke', stroke_color);
+                .style('stroke', stroke_color)
+                .style('shape-rendering', 'geometricPrecision'); // より精密な描画
             // Seismic intensity plotting function (earthquake-alert/map-draw style)
             const Export = (area, color, text) => {
                 const coordinate = aProjection(area);
                 if (!coordinate)
                     return;
-                // Draw circle background
+                // Draw circle background with improved visual quality
                 svg.append('circle')
                     .attr('r', seismic_intensity_config.circle)
                     .attr('cx', coordinate[0])
                     .attr('cy', coordinate[1])
                     .style('fill', color)
                     .style('stroke', '#000000')
-                    .style('stroke-width', '1');
-                // Draw intensity text
+                    .style('stroke-width', '2') // より太い枠線
+                    .style('filter', 'drop-shadow(1px 1px 2px rgba(0,0,0,0.5))'); // 影を追加
+                // Draw intensity text with better visibility
                 svg.append('text')
                     .text(text)
                     .attr('x', coordinate[0] + seismic_intensity_config.width)
@@ -190,7 +226,8 @@ function generateEarthquakeMap(earthquakeData, areaInfo) {
                     .attr('text-anchor', 'middle')
                     .attr('font-family', seismic_intensity_config.font)
                     .style('fill', '#000000')
-                    .style('font-weight', 'bold');
+                    .style('font-weight', 'bold')
+                    .style('text-shadow', '1px 1px 1px rgba(255,255,255,0.8)'); // テキストに影を追加
             };
             // Plot seismic intensity areas first (so epicenter appears on top)
             const intensityLevels = ['0', '1', '2', '3', '4', 'under_5', 'over_5', 'under_6', 'over_6', '7'];
@@ -198,16 +235,44 @@ function generateEarthquakeMap(earthquakeData, areaInfo) {
                 '0': '0', '1': '1', '2': '2', '3': '3', '4': '4',
                 'under_5': '5-', 'over_5': '5+', 'under_6': '6-', 'over_6': '6+', '7': '7'
             };
-            console.log('震度データ:', area_info.areas);
+            console.log('震度データの詳細:', JSON.stringify(area_info.areas, null, 2));
+            let totalStations = 0;
             for (const level of intensityLevels) {
                 if (area_info.areas[level] && area_info.areas[level].length > 0) {
                     const color = seismic_intensity_color[level];
                     const text = intensityTexts[level];
-                    console.log(`震度${text}: ${area_info.areas[level].length}地点`);
+                    const stationCount = area_info.areas[level].length;
+                    totalStations += stationCount;
+                    console.log(`震度${text}: ${stationCount}地点 - 色: ${color}`);
                     for (const area of area_info.areas[level]) {
+                        console.log(`  座標: [${area[0]}, ${area[1]}]`);
                         Export(area, color, text);
                     }
                 }
+            }
+            console.log(`総観測点数: ${totalStations}`);
+            if (totalStations === 0) {
+                console.warn('警告: 震度観測点データが見つかりませんでした。デフォルトで震源に表示します。');
+                // 震度データがない場合、震源に最大震度を表示
+                if (earthquakeData.maxScale && earthquakeData.maxScale !== '不明') {
+                    const maxScaleText = earthquakeData.maxScale.toString();
+                    const defaultColor = '#ff0000'; // 赤色をデフォルトに
+                    Export(epicenter, defaultColor, maxScaleText);
+                    console.log(`震源に最大震度${maxScaleText}を表示しました`);
+                }
+            }
+            // 常に右上に震度を表示（地図に表示されない場合も含む）
+            if (!earthquakeData.maxScale || earthquakeData.maxScale === '不明') {
+                // 震度データから最大震度を自動計算
+                let calculatedMaxScale = '0';
+                for (const level of intensityLevels.reverse()) { // 大きい震度から順に確認
+                    if (area_info.areas[level] && area_info.areas[level].length > 0) {
+                        calculatedMaxScale = intensityTexts[level];
+                        console.log(`計算された最大震度: ${calculatedMaxScale}`);
+                        break;
+                    }
+                }
+                earthquakeData.maxScale = calculatedMaxScale;
             }
             // Draw epicenter (earthquake-alert/map-draw style) - on top of intensity data
             const epicenterCoord = aProjection(epicenter);
@@ -252,6 +317,58 @@ function generateEarthquakeMap(earthquakeData, areaInfo) {
                 .attr('font-size', copyright.size)
                 .attr('font-family', copyright.font)
                 .style('fill', copyright.color);
+            // 震度数字を右上に表示する機能を追加
+            const maxScale = earthquakeData.maxScale;
+            console.log(`震度右上表示: maxScale = "${maxScale}", type = ${typeof maxScale}`);
+            if (maxScale && maxScale !== '不明' && maxScale !== '') {
+                // 震度数字を右上に大きく表示
+                let intensityText = maxScale.toString();
+                // 震度の文字列を正規化
+                if (intensityText.includes('弱')) {
+                    intensityText = intensityText.replace('弱', '-');
+                }
+                else if (intensityText.includes('強')) {
+                    intensityText = intensityText.replace('強', '+');
+                }
+                console.log(`震度右上表示: 表示する震度 = "${intensityText}"`);
+                const intensityFontSize = 100; // 大きなフォントサイズ
+                const rightMargin = 120;
+                const topMargin = 100;
+                // 背景の角丸四角形を描画（視認性向上のため）
+                svg.append('rect')
+                    .attr('x', width - rightMargin - 80)
+                    .attr('y', topMargin - 60)
+                    .attr('width', 160)
+                    .attr('height', 120)
+                    .attr('rx', 20)
+                    .attr('ry', 20)
+                    .style('fill', 'rgba(0, 0, 0, 0.8)')
+                    .style('stroke', '#ffffff')
+                    .style('stroke-width', '4')
+                    .style('filter', 'drop-shadow(3px 3px 6px rgba(0,0,0,0.5))');
+                // "震度"ラベルを描画
+                svg.append('text')
+                    .text('震度')
+                    .attr('x', width - rightMargin)
+                    .attr('y', topMargin - 20)
+                    .attr('font-size', 32)
+                    .attr('text-anchor', 'middle')
+                    .attr('font-family', 'Arial Black, sans-serif')
+                    .style('fill', '#ffffff')
+                    .style('font-weight', 'bold')
+                    .style('text-shadow', '2px 2px 4px rgba(0,0,0,0.8)');
+                // 震度数字を描画
+                svg.append('text')
+                    .text(intensityText)
+                    .attr('x', width - rightMargin)
+                    .attr('y', topMargin + 40)
+                    .attr('font-size', intensityFontSize)
+                    .attr('text-anchor', 'middle')
+                    .attr('font-family', 'Arial Black, sans-serif')
+                    .style('fill', '#ffffff')
+                    .style('font-weight', 'bold')
+                    .style('text-shadow', '3px 3px 6px rgba(0,0,0,0.9)');
+            }
             // Get SVG as HTML string
             const svgHtml = document.body.innerHTML;
             // Convert SVG to PNG using Sharp
@@ -278,7 +395,7 @@ function generateEarthquakeMap(earthquakeData, areaInfo) {
 }
 // 震度データと地震情報を抽出する関数
 function extractEarthquakeMapData(detail) {
-    var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p, _q, _r, _s, _t, _u;
+    var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p, _q;
     // 座標情報の抽出（気象庁XMLフォーマットに対応）
     let longitude = 139.69; // デフォルト（東京）
     let latitude = 35.68; // デフォルト（東京）
@@ -287,6 +404,7 @@ function extractEarthquakeMapData(detail) {
     if (hypocenterCoord) {
         if (Array.isArray(hypocenterCoord)) {
             // 配列形式の場合
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const epicenterCoord = hypocenterCoord.find((coord) => coord['@type'] === 'epicenter' || coord.type === 'epicenter');
             if (epicenterCoord && epicenterCoord['#text']) {
                 const coordText = epicenterCoord['#text'];
@@ -311,6 +429,11 @@ function extractEarthquakeMapData(detail) {
     if (longitude === 139.69 && latitude === 35.68) {
         // デフォルト座標の場合、地名から推定
         const locationMap = {
+            'トカラ列島': [129.9, 29.2],
+            'トカラ列島近海': [129.9, 29.2],
+            '奄美大島近海': [130.0, 28.5],
+            '種子島近海': [131.0, 30.5],
+            '屋久島': [130.5, 30.3],
             '福島': [140.47, 37.75],
             '宮城': [140.87, 38.27],
             '岩手': [141.15, 39.70],
@@ -368,24 +491,46 @@ function extractEarthquakeMapData(detail) {
     const areas = {};
     // 気象庁XMLから震度データを抽出
     const intensityData = (_k = (_j = detail.Body) === null || _j === void 0 ? void 0 : _j.Intensity) === null || _k === void 0 ? void 0 : _k.Observation;
+    console.log('震度観測データ:', JSON.stringify(intensityData, null, 2));
     if (intensityData && intensityData.Pref) {
         const prefectures = Array.isArray(intensityData.Pref) ? intensityData.Pref : [intensityData.Pref];
+        console.log(`処理する都道府県数: ${prefectures.length}`);
         for (const pref of prefectures) {
+            console.log(`処理中の都道府県: ${pref.Name}`);
             if (pref.Area) {
                 const areas_in_pref = Array.isArray(pref.Area) ? pref.Area : [pref.Area];
+                console.log(`  地域数: ${areas_in_pref.length}`);
                 for (const area of areas_in_pref) {
+                    console.log(`  処理中の地域: ${area.Name}`);
                     if (area.City) {
                         const cities = Array.isArray(area.City) ? area.City : [area.City];
+                        console.log(`    市区町村数: ${cities.length}`);
                         for (const city of cities) {
+                            console.log(`    処理中の市区町村: ${city.Name}`);
                             if (city.IntensityStation) {
                                 const stations = Array.isArray(city.IntensityStation) ? city.IntensityStation : [city.IntensityStation];
+                                console.log(`      観測点数: ${stations.length}`);
                                 for (const station of stations) {
                                     const intensity = station.Int;
                                     const stationName = station.Name;
-                                    // 観測点の座標を推定（都道府県・市区町村名から）
-                                    const prefName = pref.Name;
-                                    const cityName = city.Name;
-                                    const coords = estimateCoordinates(prefName, cityName, stationName);
+                                    console.log(`      観測点: ${stationName}, 震度: ${intensity}`);
+                                    // 正確な座標情報があるか確認
+                                    let coords = null;
+                                    // JSONデータに含まれる正確な座標を優先的に使用
+                                    if (station.latlon && station.latlon.lat && station.latlon.lon) {
+                                        coords = [station.latlon.lon, station.latlon.lat];
+                                        console.log(`      → 正確な座標使用: [${coords[0]}, ${coords[1]}]`);
+                                    }
+                                    else {
+                                        // フォールバック: 地名から推定
+                                        const prefName = typeof pref.Name === 'string' ? pref.Name : '';
+                                        const cityName = typeof city.Name === 'string' ? city.Name : '';
+                                        const stationNameStr = typeof stationName === 'string' ? stationName : undefined;
+                                        coords = estimateCoordinates(prefName, cityName, stationNameStr);
+                                        if (coords) {
+                                            console.log(`      → 推定座標使用: [${coords[0]}, ${coords[1]}]`);
+                                        }
+                                    }
                                     if (coords && intensity) {
                                         // 震度を earthquake-alert/map-draw 形式に変換
                                         const intensityKey = convertIntensityFormat(intensity);
@@ -393,22 +538,74 @@ function extractEarthquakeMapData(detail) {
                                             areas[intensityKey] = [];
                                         }
                                         areas[intensityKey].push(coords);
+                                        console.log(`      → 座標追加: [${coords[0]}, ${coords[1]}] 震度キー: ${intensityKey}`);
+                                    }
+                                    else {
+                                        console.log(`      → 座標取得失敗またはデータ不完全`);
                                     }
                                 }
                             }
+                            else {
+                                console.log(`      観測点データなし`);
+                            }
                         }
+                    }
+                    else {
+                        console.log(`    市区町村データなし`);
                     }
                 }
             }
+            else {
+                console.log(`  地域データなし`);
+            }
+        }
+    }
+    else {
+        console.log('震度観測データが見つかりません');
+    }
+    // 深さ情報を複数のパスから取得（earthquake.tsと同様の改善）
+    let depth = '不明';
+    const depthPaths = [
+        'Body.Earthquake.Hypocenter.Area.Depth',
+        'Body.Earthquake.Hypocenter.Depth',
+        'Body.Earthquake.Depth'
+    ];
+    for (const path of depthPaths) {
+        const pathParts = path.split('.');
+        let current = detail;
+        let success = true;
+        for (const part of pathParts) {
+            if (current && typeof current === 'object' && part in current) {
+                current = current[part];
+            }
+            else {
+                success = false;
+                break;
+            }
+        }
+        if (success && current && current !== '不明' && current !== '') {
+            depth = typeof current === 'string' ? current : String(current);
+            if (!depth.includes('km') && depth.match(/^\d+(\.\d+)?$/)) {
+                depth = `${depth}km`;
+            }
+            console.log(`深さ情報取得成功 (mapGenerator): パス=${path}, 値=${depth}`);
+            break;
+        }
+    }
+    // フォールバック: 震源名から推定
+    if (depth === '不明' && hypocenterName !== '不明') {
+        if (hypocenterName.includes('近海') || hypocenterName.includes('沖') || hypocenterName.includes('海域')) {
+            depth = '10km';
+            console.log(`深さ推定 (mapGenerator): 海域地震のため10kmと推定`);
         }
     }
     const earthquakeData = {
         longitude,
         latitude,
         magnitude: ((_m = (_l = detail.Body) === null || _l === void 0 ? void 0 : _l.Earthquake) === null || _m === void 0 ? void 0 : _m.Magnitude) || '不明',
-        depth: ((_r = (_q = (_p = (_o = detail.Body) === null || _o === void 0 ? void 0 : _o.Earthquake) === null || _p === void 0 ? void 0 : _p.Hypocenter) === null || _q === void 0 ? void 0 : _q.Area) === null || _r === void 0 ? void 0 : _r.Depth) || '不明',
+        depth,
         hypocenter: hypocenterName,
-        maxScale: ((_u = (_t = (_s = detail.Body) === null || _s === void 0 ? void 0 : _s.Intensity) === null || _t === void 0 ? void 0 : _t.Observation) === null || _u === void 0 ? void 0 : _u.MaxInt) || '不明'
+        maxScale: ((_q = (_p = (_o = detail.Body) === null || _o === void 0 ? void 0 : _o.Intensity) === null || _p === void 0 ? void 0 : _p.Observation) === null || _q === void 0 ? void 0 : _q.MaxInt) || '不明'
     };
     const areaInfo = {
         epicenter: [longitude, latitude],
