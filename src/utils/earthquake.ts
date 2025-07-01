@@ -490,6 +490,23 @@ function convertP2PtoJMAFormat(p2pData: P2PEarthquakeData): Record<string, unkno
                           p2pRecord.mag ||
                           '不明'
     
+    // P2P地震情報の緊急地震速報（code: 551）の場合の特別処理
+    if (p2pRecord.code === 551) {
+        console.log('緊急地震速報のマグニチュード取得を試行')
+        
+        // 緊急地震速報特有のフィールドから取得を試行
+        const eewMagnitude = p2pRecord.magnitude || 
+                            p2pRecord.mag ||
+                            p2pRecord.magunitude || // タイポの可能性も考慮
+                            (earthquakeData as Record<string, unknown>)?.magnitude ||
+                            (earthquakeData as Record<string, unknown>)?.mag
+        
+        if (eewMagnitude && eewMagnitude !== '不明') {
+            magnitudeValue = eewMagnitude
+            console.log(`緊急地震速報からマグニチュード取得: ${eewMagnitude}`)
+        }
+    }
+    
     // マグニチュード値の正規化処理
     if (magnitudeValue && magnitudeValue !== '不明') {
         const magStr = String(magnitudeValue)
@@ -594,9 +611,7 @@ function convertP2PtoJMAFormat(p2pData: P2PEarthquakeData): Record<string, unkno
         if (hypocenterName === '不明') {
             hypocenterName = '緊急地震速報発表'
         }
-        if (magnitudeValue === '不明') {
-            magnitudeValue = '速報値'
-        }
+        // マグニチュードが取得できない場合は「不明」のままにして「速報値」は設定しない
         if (maxScaleValue === 0 && p2pRecord.maxScale) {
             // 別のフィールド名で最大震度が設定されている可能性
             const altMaxScale = Number(p2pRecord.maxScale)
@@ -695,7 +710,9 @@ function createMapDataFromP2PInfo(detailData: Record<string, unknown>): { earthq
             magnitude: magnitude !== '不明' ? parseFloat(magnitude) || 0 : 0,
             depth: depth !== '不明' ? parseFloat(depth.replace('km', '')) || 10 : 10,
             hypocenter: hypocenter !== '不明' ? hypocenter : '不明',
-            maxScale: maxScale !== '不明' ? maxScale : '不明'
+            maxScale: maxScale !== '不明' ? maxScale : '不明',
+            source: 'P2P',  // P2P地震情報のフラグを追加
+            isP2P: true     // 追加フラグ
         }
         
         // AreaInfo型に合わせた地域情報を作成

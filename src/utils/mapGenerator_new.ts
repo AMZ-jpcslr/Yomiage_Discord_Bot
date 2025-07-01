@@ -9,34 +9,9 @@ import * as path from 'path'
 import { JSDOM } from 'jsdom'
 import sharp from 'sharp'
 
-// simplify-geojson can be required normally (CommonJS)
+// simplify-geojson can be imported normally (CommonJS)
+// eslint-disable-next-line @typescript-eslint/no-require-imports
 const simplify = require('simplify-geojson')
-
-// 震度画像URLを取得する関数（earthquake.tsと同じ）
-function getShindoImageUrl(maxScale: string | number): string | undefined {
-    switch (String(maxScale)) {
-        case '1': return 'https://i.gyazo.com/4e7e465a1fadcdacb6b2d7ad77e26613/raw'
-        case '2': return 'https://i.gyazo.com/32a63f749d9a95b1bd4c610ac54c3639/raw'
-        case '3': return 'https://i.gyazo.com/af3a39eebdc321ae76eab731e60eb110/raw'
-        case '4': return 'https://i.gyazo.com/39351fbdd780e0db5a1b4b0dfd025/raw'
-        case '5-': case '5弱': return 'https://i.gyazo.com/7bf28e3aff47cf4c4b8b20bcf9a33b29/raw'
-        case '5+': case '5強': return 'https://i.gyazo.com/3cd7bab33cf0682e57ece10df2189988/raw'
-        case '6-': case '6弱': return 'https://i.gyazo.com/77c3a1e02e8fcb0239afa5e4388146be/raw'
-        case '6+': case '6強': return 'https://i.gyazo.com/8ca22b91e82cc578dffed126f3987fbb/raw'
-        case '7': return 'https://i.gyazo.com/74b556e4e716116e546e0638ab9e5db4/raw'
-        // 数値形式の場合も対応（旧形式）
-        case '10': return 'https://i.gyazo.com/4e7e465a1fadcdacb6b2d7ad77e26613/raw'
-        case '20': return 'https://i.gyazo.com/32a63f749d9a95b1bd4c610ac54c3639/raw'
-        case '30': return 'https://i.gyazo.com/af3a39eebdc321ae76eab731e60eb110/raw'
-        case '40': return 'https://i.gyazo.com/39351fbdd780e0db5a1b4b0dfd025/raw'
-        case '45': return 'https://i.gyazo.com/7bf28e3aff47cf4c4b8b20bcf9a33b29/raw'
-        case '50': return 'https://i.gyazo.com/3cd7bab33cf0682e57ece10df2189988/raw'
-        case '55': return 'https://i.gyazo.com/77c3a1e02e8fcb0239afa5e4388146be/raw'
-        case '60': return 'https://i.gyazo.com/8ca22b91e82cc578dffed126f3987fbb/raw'
-        case '70': return 'https://i.gyazo.com/74b556e4e716116e546e0638ab9e5db4/raw'
-        default: return undefined
-    }
-}
 
 interface EarthquakeData {
     longitude: number
@@ -179,20 +154,40 @@ export async function generateEarthquakeMap(earthquakeData: EarthquakeData, area
         
         // Scale calculation (earthquake-alert/map-draw algorithm) - 震源周辺をより詳細に表示
         let _scale: number
-        if (expansion_rate === 0) {
-            _scale = 8  // 単一震源の場合はさらにズームイン
-        } else if (expansion_rate < 1) {
-            _scale = 6  // 小さな範囲の場合はより拡大
-        } else if (expansion_rate < 3) {
-            _scale = 3
-        } else if (expansion_rate < 5) {
-            _scale = 2
-        } else if (expansion_rate < 7) {
-            _scale = 1.5
-        } else if (expansion_rate < 9) {
-            _scale = 1.2
+        
+        // P2P地震情報（緊急地震速報）の場合は広域を表示
+        const earthquakeDataRecord = earthquakeData as unknown as Record<string, unknown>
+        const isP2PData = earthquakeDataRecord.source === 'P2P' || earthquakeDataRecord.isP2P === true
+        
+        if (isP2PData) {
+            // 緊急地震速報の場合は縮尺を小さくして広域を表示
+            console.log('P2P地震情報のため広域表示に調整')
+            if (expansion_rate === 0) {
+                _scale = 3  // 単一震源でも広域表示
+            } else if (expansion_rate < 3) {
+                _scale = 2  // より広域
+            } else if (expansion_rate < 7) {
+                _scale = 1.5
+            } else {
+                _scale = 1
+            }
         } else {
-            _scale = 1
+            // 通常の地震情報の場合
+            if (expansion_rate === 0) {
+                _scale = 8  // 単一震源の場合はさらにズームイン
+            } else if (expansion_rate < 1) {
+                _scale = 6  // 小さな範囲の場合はより拡大
+            } else if (expansion_rate < 3) {
+                _scale = 3
+            } else if (expansion_rate < 5) {
+                _scale = 2
+            } else if (expansion_rate < 7) {
+                _scale = 1.5
+            } else if (expansion_rate < 9) {
+                _scale = 1.2
+            } else {
+                _scale = 1
+            }
         }
         
         // Simplify geojson data with higher resolution for better map accuracy
@@ -364,10 +359,12 @@ export async function generateEarthquakeMap(earthquakeData: EarthquakeData, area
             .attr('font-family', copyright.font)
             .style('fill', copyright.color)
 
-        // 震度数字を右上に表示する機能を追加
-        const maxScale = earthquakeData.maxScale
-        console.log(`震度右上表示: maxScale = "${maxScale}", type = ${typeof maxScale}`)
+        // 震度数字を右上に表示する機能（無効化）
+        // const maxScale = earthquakeData.maxScale
+        // console.log(`震度右上表示: maxScale = "${maxScale}", type = ${typeof maxScale}`)
         
+        // 震度右上表示を無効化
+        /*
         if (maxScale && maxScale !== '不明' && maxScale !== '') {
             // 震度数字を右上に大きく表示
             let intensityText = maxScale.toString()
@@ -422,6 +419,7 @@ export async function generateEarthquakeMap(earthquakeData: EarthquakeData, area
                 .style('font-weight', 'bold')
                 .style('text-shadow', '3px 3px 6px rgba(0,0,0,0.9)')
         }
+        */
         
         // Get SVG as HTML string
         const svgHtml = document.body.innerHTML
