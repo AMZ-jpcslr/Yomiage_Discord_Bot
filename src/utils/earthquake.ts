@@ -680,7 +680,8 @@ function convertP2PMaxScaleToJMAFormat(p2pMaxScale: number): string {
     }
 }
 
-// P2P地震情報から地図生成用データを作成する関数
+// P2P地震情報から地図生成用データを作成する関数（非使用、今後削除予定）
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function createMapDataFromP2PInfo(detailData: Record<string, unknown>): { earthquakeData: Record<string, unknown>, areaInfo: Record<string, unknown> } | null {
     try {
         console.log('=== P2P地震情報から地図データを作成 ===')
@@ -896,51 +897,49 @@ async function createEarthquakeEmbedFromData(detailData: Record<string, unknown>
                 throw new Error('Canvas ライブラリが利用できないため、P2P地図生成をスキップします')
             }
             
-            // P2P地震情報用の地図データを作成
-            const mapData = createMapDataFromP2PInfo(detailData)
-            if (mapData) {
-                console.log('✅ P2P地図データの作成に成功:', mapData)
-                const { earthquakeData, areaInfo } = mapData
+            // P2P地震情報も通常と同じ地図生成処理を使用
+            const { earthquakeData, areaInfo } = extractEarthquakeMapData(detailData)
+            console.log('P2P地震データ抽出完了:', { earthquakeData, areaInfo })
+            
+            // P2Pフラグを追加してP2P地震情報であることを識別
+            const p2pEarthquakeData = {
+                ...earthquakeData,
+                source: 'P2P',
+                isP2P: true
+            }
+            
+            console.log('P2P地図生成を実行中...')
+            
+            // タイムアウト付きで地図生成を実行（通常と同じ関数を使用）
+            const mapGenerationPromise = generateEarthquakeMap(p2pEarthquakeData, areaInfo)
+            const timeoutPromise = new Promise<never>((_, reject) => {
+                setTimeout(() => reject(new Error('P2P地図生成がタイムアウトしました (30秒)')), 30000)
+            })
+            
+            generatedMapPath = await Promise.race([mapGenerationPromise, timeoutPromise])
+            
+            // 地図ファイルが実際に生成されたかを確認
+            if (generatedMapPath && fs.existsSync(generatedMapPath)) {
+                const stats = fs.statSync(generatedMapPath)
+                console.log(`✅ P2P地図ファイル生成成功: ${generatedMapPath} (${stats.size} bytes)`)
                 
-                console.log('P2P地図生成を実行中...')
-                
-                // タイムアウト付きで地図生成を実行
-                const mapGenerationPromise = generateEarthquakeMap(
-                    earthquakeData as unknown as Parameters<typeof generateEarthquakeMap>[0], 
-                    areaInfo as unknown as Parameters<typeof generateEarthquakeMap>[1]
-                )
-                const timeoutPromise = new Promise<never>((_, reject) => {
-                    setTimeout(() => reject(new Error('P2P地図生成がタイムアウトしました (30秒)')), 30000)
-                })
-                
-                generatedMapPath = await Promise.race([mapGenerationPromise, timeoutPromise])
-                
-                // 地図ファイルが実際に生成されたかを確認
-                if (generatedMapPath && fs.existsSync(generatedMapPath)) {
-                    const stats = fs.statSync(generatedMapPath)
-                    console.log(`✅ P2P地図ファイル生成成功: ${generatedMapPath} (${stats.size} bytes)`)
-                    
-                    // ファイルサイズの妥当性チェック
-                    if (stats.size > 8 * 1024 * 1024) {
-                        console.warn(`⚠️  P2P生成地図ファイルが大きすぎます: ${stats.size} bytes`)
-                        fs.unlinkSync(generatedMapPath)
-                        throw new Error('P2P生成地図ファイルが大きすぎます')
-                    }
-                    
-                    // 生成された画像をDiscordの添付ファイルとして準備
-                    const attachment = new AttachmentBuilder(generatedMapPath, { 
-                        name: 'earthquake_map.png' 
-                    })
-                    attachments.push(attachment)
-                    mapGenerationSuccess = true
-                    console.log('✅ P2P地震情報用地図画像の生成に成功:', generatedMapPath)
-                } else {
-                    console.error('❌ P2P地図ファイルが生成されませんでした:', generatedMapPath)
-                    throw new Error('P2P地図ファイルの生成に失敗しました')
+                // ファイルサイズの妥当性チェック
+                if (stats.size > 8 * 1024 * 1024) {
+                    console.warn(`⚠️  P2P生成地図ファイルが大きすぎます: ${stats.size} bytes`)
+                    fs.unlinkSync(generatedMapPath)
+                    throw new Error('P2P生成地図ファイルが大きすぎます')
                 }
+                
+                // 生成された画像をDiscordの添付ファイルとして準備
+                const attachment = new AttachmentBuilder(generatedMapPath, { 
+                    name: 'earthquake_map.png' 
+                })
+                attachments.push(attachment)
+                mapGenerationSuccess = true
+                console.log('✅ P2P地震情報用地図画像の生成に成功:', generatedMapPath)
             } else {
-                console.error('❌ P2P地震情報から地図データの作成に失敗')
-                throw new Error('P2P地震情報から地図データを作成できませんでした')
+                console.error('❌ P2P地図ファイルが生成されませんでした:', generatedMapPath)
+                throw new Error('P2P地図ファイルの生成に失敗しました')
             }
         } catch (error) {
             console.error('❌ P2P地震マップ画像生成エラー:', error)
