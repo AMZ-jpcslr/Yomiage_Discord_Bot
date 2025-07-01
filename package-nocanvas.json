@@ -9,7 +9,10 @@
     "start:safe": "SKIP_MAP_GENERATION=true NODE_ENV=production node build/main.js",
     "compile": "tsc -p .",
     "docker:build": "docker build -t earthquake-discord-bot .",
-    "docker:run": "docker-compose up -d"
+    "docker:run": "docker-compose up -d",
+    "build": "npm install canvas --build-from-source && tsc -p .",
+    "railway:build": "npm ci && npm rebuild canvas --build-from-source && npm run compile",
+    "postinstall": "npm rebuild canvas --build-from-source || echo 'Canvas rebuild failed, continuing...'"
   },
   "keywords": [],
   "author": "",

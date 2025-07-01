@@ -8,7 +8,7 @@ README.md
 coverage
 .cache
 dist
-build
+# build <- buildディレクトリは除外しない（コメントアウト）
 logs
 *.log
 .DS_Store

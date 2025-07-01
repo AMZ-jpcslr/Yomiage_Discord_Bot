@@ -1,0 +1,39 @@
+# シンプルなDockerfile（地図生成なし版）
+FROM node:18-alpine
+
+# 基本パッケージのみインストール
+RUN apk add --no-cache \
+    python3 \
+    make \
+    g++ \
+    git
+
+# 作業ディレクトリ設定
+WORKDIR /app
+
+# package.jsonをコピー
+COPY package*.json ./
+
+# 依存関係をインストール（Canvasなし）
+RUN npm ci --only=production
+
+# ソースコードをコピー
+COPY . .
+
+# TypeScriptをコンパイル
+RUN npm run compile
+
+# 画像用ディレクトリ作成
+RUN mkdir -p /app/generated_images && \
+    mkdir -p /app/generated_maps
+
+# 環境変数設定
+ENV NODE_ENV=production
+ENV SKIP_MAP_GENERATION=true
+ENV FORCE_MAP_GENERATION=false
+
+# ポート公開
+EXPOSE 3000
+
+# ボット起動
+CMD ["npm", "run", "start:prod"]
