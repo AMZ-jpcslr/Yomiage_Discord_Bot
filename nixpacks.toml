@@ -1,3 +1,4 @@
+# Railway用設定 - Dockerを使用してCanvas対応
 [phases.setup]
 nixPkgs = [
   "cairo",
@@ -15,3 +16,7 @@ cmds = [
   "npm rebuild canvas --build-from-source",
   "npm run compile"
 ]
+
+# Dockerを優先使用する設定
+[variables]
+NIXPACKS_NO_CACHE = "1"

@@ -1,0 +1,23 @@
+# Railway プロジェクト設定
+# このファイルをプロジェクトルートに配置
+
+# ビルド設定
+build:
+  buildCommand: npm run build
+  startCommand: npm run start:prod
+
+# 環境変数
+environment:
+  NODE_ENV: production
+  FORCE_MAP_GENERATION: true
+  CANVAS_PREBUILT: false
+  NODE_OPTIONS: "--max-old-space-size=2048"
+
+# リソース設定
+resources:
+  memory: 2048
+  cpu: 1000
+
+# ヘルスチェック
+healthcheck:
+  enabled: false

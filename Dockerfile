@@ -1,7 +1,7 @@
 # Use Node.js LTS version with minimal dependencies
 FROM node:18-alpine
 
-# Install system dependencies needed for Sharp and image processing
+# Install system dependencies needed for Sharp, Canvas and image processing
 RUN apk add --no-cache \
     vips-dev \
     build-base \
@@ -10,7 +10,14 @@ RUN apk add --no-cache \
     g++ \
     libc6-compat \
     fontconfig \
-    ttf-dejavu
+    ttf-dejavu \
+    cairo-dev \
+    pango-dev \
+    jpeg-dev \
+    giflib-dev \
+    librsvg-dev \
+    pixman-dev \
+    pkg-config
 
 # Set working directory
 WORKDIR /app
@@ -18,19 +25,27 @@ WORKDIR /app
 # Copy package files
 COPY package*.json ./
 
-# Install dependencies
-RUN npm ci --only=production
+# Install dependencies and rebuild Canvas
+RUN npm ci --only=production && \
+    npm rebuild canvas --build-from-source
 
 # Copy source code and build files
 COPY . .
 
-# Create directories for generated maps
-RUN mkdir -p /app/generated_maps
+# Compile TypeScript
+RUN npm run compile
+
+# Create directories for generated images
+RUN mkdir -p /app/generated_images && \
+    mkdir -p /app/generated_maps
 
 # Set environment variables for production
 ENV NODE_ENV=production
-# Skip map generation if font issues persist
+# Enable Canvas map generation for Railway
+ENV FORCE_MAP_GENERATION=true
 ENV SKIP_MAP_GENERATION=false
+# Canvas specific settings
+ENV CANVAS_PREBUILT=false
 
 # Expose port (if needed for health checks)
 EXPOSE 3000
