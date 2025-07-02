@@ -43,7 +43,7 @@ function getShindoImageUrl(maxScale: string | number): string | undefined {
         case '1': case '10': return 'https://i.gyazo.com/4e7e465a1fadcdacb6b2d7ad77e26613/raw'
         case '2': case '20': return 'https://i.gyazo.com/32a63f749d9a95b1bd4c610ac54c3639/raw'
         case '3': case '30': return 'https://i.gyazo.com/af3a39eebdc321ae76eab731e60eb110/raw'
-        case '4': case '40': return 'https://i.gyazo.com/39351fbdd780e0db5a1b4b0dfd025/raw'
+        case '4': case '40': return 'https://gyazo.com/39351fbdd780e0db5a1b4b24b0dfd025/raw'
         case '5弱': case '5-': case '45': return 'https://i.gyazo.com/7bf28e3aff47cf4c4b8b20bcf9a33b29/raw'
         case '5強': case '5+': case '50': return 'https://i.gyazo.com/3cd7bab33cf0682e57ece10df2189988/raw'
         case '6弱': case '6-': case '55': return 'https://i.gyazo.com/77c3a1e02e8fcb0239afa5e4388146be/raw'
@@ -179,267 +179,212 @@ function getAdditionalText(detailData: Record<string, unknown>): string {
     return ''  // 空文字を返すことで表示しない
 }
 
-// マグニチュード情報を抽出する関数を追加
-function getMagnitudeInfo(detailData: Record<string, unknown>): string {
-    console.log('マグニチュード抽出開始')
-    
-    // 複数のパスでマグニチュード情報を試行
-    const magnitudePaths = [
-        'Body.Earthquake.Magnitude',
-        'Body.Earthquake.jmx_eb:Magnitude',
-        'Body.Earthquake.Hypocenter.Magnitude',
-        'Body.Earthquake.Hypocenter.Area.Magnitude',
-        'Head.Headline.Information.Item.Areas.Area.Magnitude'
-    ]
-    
-    for (const path of magnitudePaths) {
-        const magnitude = safeGet(detailData, path)
-        console.log(`マグニチュード取得試行: パス=${path}, 結果=${magnitude}`)
-        
-        if (magnitude !== '不明' && magnitude !== '' && magnitude !== 'null') {
-            // マグニチュードの値を正規化
-            if (magnitude.includes('M') || magnitude.includes('m')) {
-                console.log(`マグニチュード取得成功: ${magnitude}`)
-                return magnitude
-            } else if (magnitude.match(/^\d+(\.\d+)?$/)) {
-                const formattedMag = `M${magnitude}`
-                console.log(`マグニチュード取得成功（フォーマット済み）: ${formattedMag}`)
-                return formattedMag
-            }
-        }
-    }
-    
-    // オブジェクト形式の場合の処理
-    try {
-        const earthquake = (detailData.Body as any)?.Earthquake
-        if (earthquake?.Magnitude) {
-            const magObj = earthquake.Magnitude
-            
-            // オブジェクト形式の場合
-            if (typeof magObj === 'object') {
-                // XMLパース後の構造を確認
-                const magValue = magObj['#text'] || magObj.value || magObj['@value'] || magObj.content
-                if (magValue) {
-                    console.log(`マグニチュード取得成功（オブジェクト形式）: M${magValue}`)
-                    return `M${magValue}`
-                }
-                
-                // 属性として格納されている場合
-                const attrs = magObj['@attributes'] || magObj.attributes
-                if (attrs && attrs.value) {
-                    console.log(`マグニチュード取得成功（属性形式）: M${attrs.value}`)
-                    return `M${attrs.value}`
-                }
-            }
-        }
-    } catch (error) {
-        console.log('マグニチュードオブジェクト解析エラー:', error)
-    }
-    
-    // 緊急地震速報の場合の特別処理
-    try {
-        const headline = (detailData.Head as any)?.Headline
-        if (headline?.Information) {
-            const info = Array.isArray(headline.Information) ? headline.Information[0] : headline.Information
-            if (info?.Item) {
-                const item = Array.isArray(info.Item) ? info.Item[0] : info.Item
-                if (item?.Areas?.Area) {
-                    const area = Array.isArray(item.Areas.Area) ? item.Areas.Area[0] : item.Areas.Area
-                    if (area?.Magnitude) {
-                        const magnitude = area.Magnitude
-                        console.log(`緊急地震速報マグニチュード取得: M${magnitude}`)
-                        return `M${magnitude}`
-                    }
-                }
-            }
-        }
-    } catch (error) {
-        console.log('緊急地震速報マグニチュード解析エラー:', error)
-    }
-    
-    console.log('マグニチュード情報取得失敗: すべてのパスで不明')
-    return '情報なし'
-}
-
-// 緊急地震速報用の専用関数を追加
-function extractEEWMagnitude(detail: Record<string, unknown>): string {
-    console.log('緊急地震速報マグニチュード抽出開始')
-    console.log('EEWデータ構造:', JSON.stringify(detail, null, 2))
-    
-    try {
-        // 緊急地震速報のXML構造に特化した抽出
-        const body = detail.Body as any
-        
-        // パターン1: Body.Earthquake.Magnitude
-        if (body?.Earthquake?.Magnitude) {
-            const mag = body.Earthquake.Magnitude
-            if (typeof mag === 'string' || typeof mag === 'number') {
-                return `M${mag}`
-            }
-            if (typeof mag === 'object' && mag['#text']) {
-                return `M${mag['#text']}`
-            }
-        }
-        
-        // パターン2: Body.Intensity内の情報
-        if (body?.Intensity?.Observation?.Item) {
-            const items = Array.isArray(body.Intensity.Observation.Item) 
-                ? body.Intensity.Observation.Item 
-                : [body.Intensity.Observation.Item]
-            
-            for (const item of items) {
-                if (item?.Magnitude) {
-                    return `M${item.Magnitude}`
-                }
-            }
-        }
-        
-        // パターン3: Head.Headline内の情報
-        const headline = (detail.Head as any)?.Headline
-        if (headline?.Text) {
-            // テキストからマグニチュードを抽出
-            const text = headline.Text
-            const magMatch = text.match(/M(\d+\.?\d*)/i)
-            if (magMatch) {
-                return `M${magMatch[1]}`
-            }
-        }
-        
-        console.log('緊急地震速報マグニチュード抽出失敗')
-        return '速報値算出中'
-        
-    } catch (error) {
-        console.error('緊急地震速報マグニチュード抽出エラー:', error)
-        return '速報値算出中'
-    }
-}
-
 // 地震情報の埋め込みを作成する共通関数
-export async function createEarthquakeEmbed(latestId: string, isEEW: boolean = false): Promise<{ embed: EmbedBuilder, files: AttachmentBuilder[] }> {
-    console.log('地震情報取得開始:', latestId)
+export async function createEarthquakeEmbed(latestId: string, isAutoNotify = false): Promise<{ embed: EmbedBuilder, files?: AttachmentBuilder[] }> {
+    const detailRes = await fetch(`https://www.jma.go.jp/bosai/quake/data/${latestId}`)
+    const detail = await detailRes.json() as Record<string, unknown>
+
+    const detailData = detail as Record<string, unknown>
+    const time = safeGet(detailData, 'Head.ReportDateTime')
+    const hypocenter = safeGet(detailData, 'Body.Earthquake.Hypocenter.Area.Name')
+    const magnitude = safeGet(detailData, 'Body.Earthquake.Magnitude')
+    const maxScale = getMaxIntensity(detailData) // 改善された最大震度取得関数を使用
+    const depth = getDepthInfo(detailData) // 改善された深さ取得関数を使用
+    const text = getAdditionalText(detailData) // 改善された追加テキスト取得関数を使用
     
-    try {
-        // 詳細データを取得
-        const detailUrl = `https://www.jma.go.jp/bosai/quake/data/${latestId}`
-        console.log('地震詳細取得URL:', detailUrl)
-        
-        const detailRes = await fetch(detailUrl)
-        const detail = await detailRes.json() as Record<string, unknown>
-        
-        console.log('地震詳細データ構造:', JSON.stringify(detail, null, 2))
-        
-        // マグニチュード情報を取得（改善された関数を使用）
-        let magnitude: string
-        if (isEEW) {
-            magnitude = extractEEWMagnitude(detail)
-        } else {
-            magnitude = getMagnitudeInfo(detail)
-        }
-        
-        console.log('最終マグニチュード値:', magnitude)
-        
-        // 震源地情報を取得
-        const hypocenter = safeGet(detail, 'Body.Earthquake.Hypocenter.Area.Name')
-        console.log('震源地:', hypocenter)
-        
-        // 深さ情報を取得
-        const depth = getDepthInfo(detail)
-        console.log('深さ:', depth)
-        
-        // 最大震度を取得
-        let maxScale = safeGet(detail, 'Body.Intensity.Observation.MaxInt')
-        if (maxScale === '不明') {
-            maxScale = safeGet(detail, 'Body.Intensity.Forecast.MaxInt')
-        }
-        if (maxScale === '不明') {
-            maxScale = safeGet(detail, 'Body.Earthquake.Magnitude') // フォールバック
-        }
-        
-        console.log('生の震度値:', maxScale, '型:', typeof maxScale)
-        
-        const maxScaleStr = maxScaleToString(maxScale)
-        console.log('震度値:', maxScaleStr, '型:', typeof maxScaleStr)
-        
-        // 震度画像URLを取得
-        const shindoImageUrl = getShindoImageUrl(maxScaleStr)
-        console.log('震度画像URL:', shindoImageUrl)
-        
-        // 地震マップを生成
-        let files: AttachmentBuilder[] = []
-        let mapImageUrl: string | undefined
-        
+    console.log(`地震情報: 時刻=${time}, 震源=${hypocenter}, M=${magnitude}, 最大震度=${maxScale}, 深さ=${depth}, 追加テキスト=${text}`)
+    
+    // 最大震度の文字列変換を改善
+    let maxScaleStr = '不明'
+    if (maxScale !== '不明' && maxScale !== '') {
+        maxScaleStr = maxScaleToString(maxScale)
+    } else {
+        // フォールバック: 地震データから最大震度を推定
+        console.log('最大震度が不明のため、地震マップデータから推定を試行')
         try {
-            if (process.env.SKIP_MAP_GENERATION !== 'true') {
-                const { earthquakeData, areaInfo } = extractEarthquakeMapData(detail)
-                const mapPath = await generateEarthquakeMap(earthquakeData, areaInfo)
-                
-                const attachment = new AttachmentBuilder(mapPath, { 
-                    name: 'earthquake_map.png',
-                    description: '地震マップ'
-                })
-                files.push(attachment)
-                mapImageUrl = 'attachment://earthquake_map.png'
-                console.log('地震マップ生成成功:', mapPath)
+            const { earthquakeData } = extractEarthquakeMapData(detail)
+            if (earthquakeData.maxScale && earthquakeData.maxScale !== '不明') {
+                maxScaleStr = earthquakeData.maxScale.toString()
+                console.log(`地震マップデータから最大震度を取得: ${maxScaleStr}`)
             }
-        } catch (mapError) {
-            console.error('地震マップ生成エラー:', mapError)
-            // マップ生成に失敗してもボットは継続動作
+        } catch (error) {
+            console.log('地震マップデータからの震度取得に失敗:', error)
         }
-        
-        // 発表時刻を取得・フォーマット
-        const reportDateTime = safeGet(detail, 'Head.ReportDateTime')
-        let formattedTime = '不明'
-        
-        if (reportDateTime !== '不明') {
-            try {
-                const date = new Date(reportDateTime)
-                formattedTime = date.toLocaleString('ja-JP', {
-                    timeZone: 'Asia/Tokyo',
-                    year: 'numeric',
-                    month: '2-digit',
-                    day: '2-digit',
-                    hour: '2-digit',
-                    minute: '2-digit'
-                })
-            } catch (e) {
-                console.error('時刻フォーマットエラー:', e)
-                formattedTime = reportDateTime
-            }
-        }
-        
-        // Embedを作成
-        const embed = new EmbedBuilder()
-            .setTitle(isEEW ? '🚨 緊急地震速報' : '📊 地震情報')
-            .setColor(isEEW ? '#FF0000' : '#0099FF')
-            .setTimestamp()
-            .addFields(
-                { name: '🎯 震源地', value: hypocenter, inline: true },
-                { name: '📏 規模', value: magnitude, inline: true }, // ここで改善されたマグニチュードを使用
-                { name: '📍 深さ', value: depth, inline: true },
-                { name: '🎚️ 最大震度', value: maxScaleStr, inline: true },
-                { name: '⏰ 発表時刻', value: formattedTime, inline: true }
-            )
-            .setFooter({ 
-                text: '気象庁データ | 地震情報は自動取得されています',
-                iconURL: 'https://www.jma.go.jp/jma/favicon.ico'
-            })
-        
-        // 画像を設定
-        if (mapImageUrl) {
-            embed.setImage(mapImageUrl)
-        }
-        
-        if (shindoImageUrl) {
-            embed.setThumbnail(shindoImageUrl)
-            console.log('サムネイル設定完了:', shindoImageUrl)
-        }
-        
-        return { embed, files }
-        
-    } catch (error) {
-        console.error('地震情報の取得エラー:', error)
-        throw error
     }
+    
+    console.log(`maxScale: "${maxScale}", maxScaleStr: "${maxScaleStr}"`)
+
+    // 震度画像URL取得 - 複数の形式に対応
+    let shindoImageUrl = getShindoImageUrl(maxScale)
+    if (!shindoImageUrl && maxScaleStr !== '不明') {
+        shindoImageUrl = getShindoImageUrl(maxScaleStr)
+    }
+    console.log(`震度画像URL: ${shindoImageUrl}`)
+
+    // 独自の地震マップ画像を生成
+    let generatedMapPath: string | null = null
+    const attachments: AttachmentBuilder[] = []
+    
+    // サーバー環境の検出
+    const isServerEnvironment = process.env.NODE_ENV === 'production' || 
+                               process.env.RAILWAY_ENVIRONMENT || 
+                               process.env.HEROKU_APP_NAME ||
+                               process.env.VERCEL ||
+                               !process.env.HOME?.includes('Users') // Windows以外の環境
+    
+    // サーバー環境では地震マップ生成をスキップするオプション
+    const skipMapGeneration = process.env.SKIP_MAP_GENERATION === 'true' || 
+                              (isServerEnvironment && process.env.FORCE_MAP_GENERATION !== 'true')
+    
+    console.log(`=== 環境情報 ===`)
+    console.log(`サーバー環境: ${isServerEnvironment}`)
+    console.log(`地図生成スキップ: ${skipMapGeneration}`)
+    console.log(`NODE_ENV: ${process.env.NODE_ENV}`)
+    console.log(`SKIP_MAP_GENERATION: ${process.env.SKIP_MAP_GENERATION}`)
+    console.log(`FORCE_MAP_GENERATION: ${process.env.FORCE_MAP_GENERATION}`)
+    
+    if (!skipMapGeneration) {
+        try {
+            console.log('=== 地図生成処理開始 ===')
+            
+            // Canvas ライブラリの利用可能性をチェック
+            try {
+                await import('canvas')
+                console.log('✅ Canvas ライブラリが利用可能')
+            } catch (canvasError) {
+                console.error('❌ Canvas ライブラリが利用できません:', canvasError)
+                throw new Error('Canvas ライブラリが利用できないため、地図生成をスキップします')
+            }
+            
+            // ディスク容量とメモリ使用量をチェック
+            const freeMemory = process.memoryUsage()
+            console.log(`メモリ使用量: ${JSON.stringify(freeMemory)}`)
+            
+            const { earthquakeData, areaInfo } = extractEarthquakeMapData(detail)
+            console.log('地震データ抽出完了:', { earthquakeData, areaInfo })
+            
+            // タイムアウト付きで地図生成を実行
+            const mapGenerationPromise = generateEarthquakeMap(earthquakeData, areaInfo)
+            const timeoutPromise = new Promise<never>((_, reject) => {
+                setTimeout(() => reject(new Error('地図生成がタイムアウトしました (30秒)')), 30000)
+            })
+            
+            generatedMapPath = await Promise.race([mapGenerationPromise, timeoutPromise])
+            
+            // 生成されたファイルの存在確認
+            if (generatedMapPath && fs.existsSync(generatedMapPath)) {
+                const stats = fs.statSync(generatedMapPath)
+                console.log(`✅ 地図ファイル生成成功: ${generatedMapPath} (${stats.size} bytes)`)
+                
+                // ファイルサイズの妥当性チェック（8MBを超える場合は異常）
+                if (stats.size > 8 * 1024 * 1024) {
+                    console.warn(`⚠️  生成された地図ファイルが大きすぎます: ${stats.size} bytes`)
+                    fs.unlinkSync(generatedMapPath) // 異常に大きなファイルを削除
+                    throw new Error('生成された地図ファイルが大きすぎます')
+                }
+                
+                // 生成された画像をDiscordの添付ファイルとして準備
+                const attachment = new AttachmentBuilder(generatedMapPath, { 
+                    name: 'earthquake_map.png' 
+                })
+                attachments.push(attachment)
+                console.log('✅ 独自地震マップ画像を生成しました:', generatedMapPath)
+            } else {
+                console.error('❌ 地図ファイルが生成されませんでした:', generatedMapPath)
+                throw new Error('地図ファイルの生成に失敗しました')
+            }
+        } catch (error) {
+            console.error('❌ 地震マップ画像生成エラー:', error)
+            console.error('エラーの詳細:', error instanceof Error ? error.stack : String(error))
+            
+            // サーバー環境での一般的な問題を特定
+            if (error instanceof Error) {
+                if (error.message.includes('Canvas') || error.message.includes('cairo')) {
+                    console.error('🔧 Canvas ライブラリまたはシステム依存関係の問題です')
+                    console.error('解決方法: サーバーにCanvas関連パッケージをインストールしてください')
+                } else if (error.message.includes('permission') || error.message.includes('EACCES')) {
+                    console.error('🔧 ファイルシステムの権限問題です')
+                    console.error('解決方法: generated_imagesディレクトリの書き込み権限を確認してください')
+                } else if (error.message.includes('timeout') || error.message.includes('タイムアウト')) {
+                    console.error('🔧 処理時間制限に達しました')
+                    console.error('解決方法: サーバーのCPU/メモリリソースを増強してください')
+                } else if (error.message.includes('memory') || error.message.includes('out of memory')) {
+                    console.error('🔧 メモリ不足です')
+                    console.error('解決方法: サーバーのメモリ容量を増やしてください')
+                }
+            }
+            
+            console.log('⚠️  地震マップなしで通知を続行します')
+            // エラーが発生してもボットの動作を継続
+        }
+    } else {
+        if (isServerEnvironment && process.env.FORCE_MAP_GENERATION !== 'true') {
+            console.log('🖥️  サーバー環境のため地震マップ生成をスキップしました')
+            console.log('💡 強制的に地図生成を行う場合は環境変数 FORCE_MAP_GENERATION=true を設定してください')
+        } else {
+            console.log('⏭️  地震マップ生成はスキップされました（SKIP_MAP_GENERATION=true）')
+        }
+    }
+
+    // 埋め込み作成
+    const title = isAutoNotify ? '🚨 【自動通知】地震情報' : '🚨 地震情報'
+    
+    // 説明文の最大震度部分を改善
+    let intensityDescription = ''
+    if (maxScaleStr !== '不明' && maxScaleStr !== '') {
+        intensityDescription = `**最大震度${maxScaleStr}の地震がありました。**\n`
+    } else {
+        intensityDescription = `**地震がありました。**\n`
+        console.log('最大震度が不明のため、説明文から震度表記を省略')
+    }
+    
+    // 追加テキスト（津波情報等）の処理を改善
+    let additionalInfo = ''
+    if (text && text.trim() !== '' && text !== '不明') {
+        additionalInfo = text.trim() + '\n'
+        console.log(`追加情報を表示: ${text}`)
+    } else {
+        console.log('追加情報なし、または空のため表示をスキップ')
+    }
+    
+    const embed = new EmbedBuilder()
+        .setTitle(title)
+        .setColor(0xff4444)
+        .setDescription(
+            `**${time.replace(/T/, ' ').replace(/\+09:00/, '')}ごろ、**\n` +
+            intensityDescription +
+            additionalInfo
+        )
+        .addFields(
+            { name: '震源', value: hypocenter !== '不明' ? hypocenter : '情報なし', inline: true },
+            { name: '規模', value: (magnitude !== '不明' && magnitude !== '' && magnitude !== 'M速報値') ? `M${magnitude}` : '情報なし', inline: true },
+            { name: '深さ', value: depth !== '不明' ? depth : '情報なし', inline: true }
+        )
+    
+    // 最大震度が取得できた場合は追加フィールドとして表示
+    if (maxScaleStr !== '不明' && maxScaleStr !== '') {
+        embed.addFields({ name: '最大震度', value: maxScaleStr, inline: true })
+    }
+
+    // 震度画像を右上サムネイルに設定
+    if (shindoImageUrl) {
+        embed.setThumbnail(shindoImageUrl)
+    }
+
+    // 生成された地震マップ画像をメイン画像として設定
+    if (generatedMapPath) {
+        embed.setImage('attachment://earthquake_map.png')
+        console.log('生成された地震マップをメイン画像に設定')
+    }
+
+    // フッター設定
+    embed.setFooter({ 
+        text: 'Earthquake Information by JMA', 
+        iconURL: 'https://www.jma.go.jp/jma/kishou/favicon.ico' 
+    })
+    embed.setTimestamp(new Date())
+
+    return { embed, files: attachments.length > 0 ? attachments : undefined }
 }
 
 // P2P地震情報のデータ型定義（実際のデータ構造に合わせて拡張）
@@ -1100,31 +1045,27 @@ async function createEarthquakeEmbedFromData(detailData: Record<string, unknown>
     console.log(`- 添付ファイル数: ${attachments.length}`)
     
     // 埋め込み作成
-    const title = isAutoNotify ? '🚨 【自動通知】地震情報' : '🚨 地震情報'
+    const title = isAutoNotify ? '🚨 【緊急地震速報】' : '🚨 地震情報'
     
-    // 説明文の最大震度部分を改善
+    // 説明文の最大震度部分
     let intensityDescription = ''
     if (maxScaleStr !== '不明' && maxScaleStr !== '') {
         intensityDescription = `**最大震度${maxScaleStr}の地震がありました。**\n`
     } else {
         intensityDescription = `**地震がありました。**\n`
-        console.log('最大震度が不明のため、説明文から震度表記を省略')
     }
     
-    // 追加テキスト（津波情報等）の処理を改善
+    // 追加テキスト（津波情報等）の処理
     let additionalInfo = ''
     if (text && text.trim() !== '' && text !== '不明') {
         additionalInfo = text.trim() + '\n'
-        console.log(`追加情報を表示: ${text}`)
-    } else {
-        console.log('追加情報なし、または空のため表示をスキップ')
     }
     
     const embed = new EmbedBuilder()
         .setTitle(title)
-        .setColor(0xff4444)
+        .setColor(0xff0000) // 緊急地震速報は赤色
         .setDescription(
-            `**${time.replace(/T/, ' ').replace(/\+09:00/, '')}ごろ、**\n` +
+            `**${time.replace(/T/, ' ').replace(/\+09:00/, '').replace(/Z/, '')}ごろ、**\n` +
             intensityDescription +
             additionalInfo
         )
@@ -1142,22 +1083,34 @@ async function createEarthquakeEmbedFromData(detailData: Record<string, unknown>
     // 震度画像を右上サムネイルに設定
     if (shindoImageUrl) {
         embed.setThumbnail(shindoImageUrl)
+        console.log('震度画像をサムネイルに設定:', shindoImageUrl)
     }
 
-    // 生成された地震マップ画像をメイン画像として設定
-    if (generatedMapPath) {
+    // 生成された地震マップ画像をメイン画像として設定（生成成功時のみ）
+    if (mapGenerationSuccess && generatedMapPath && attachments.length > 0) {
         embed.setImage('attachment://earthquake_map.png')
-        console.log('生成された地震マップをメイン画像に設定')
+        console.log('✅ 生成されたP2P地震マップをメイン画像に設定')
+    } else {
+        console.log('⚠️  地震マップが生成されていないため、マップ画像をスキップ')
     }
 
     // フッター設定
     embed.setFooter({ 
-        text: 'Earthquake Information by JMA', 
+        text: 'Earthquake Information by P2P & JMA', 
         iconURL: 'https://www.jma.go.jp/jma/kishou/favicon.ico' 
     })
     embed.setTimestamp(new Date())
 
-    return { embed, files: attachments.length > 0 ? attachments : undefined }
+    console.log('=== P2P地震情報埋め込み作成完了 ===')
+    console.log(`- 地図生成成功: ${mapGenerationSuccess}`)
+    console.log(`- 添付ファイル数: ${attachments.length}`)
+    console.log(`- 震度画像: ${shindoImageUrl ? 'あり' : 'なし'}`)
+
+    return { 
+        embed, 
+        files: attachments.length > 0 ? attachments : undefined,
+        mapGenerated: mapGenerationSuccess 
+    }
 }
 
 // P2P地震情報データからJMAの地震IDを特定する関数
