@@ -337,6 +337,39 @@ async function createEarthquakeEmbed(wolfixData: WolfixEEWData, isEEW: boolean =
         description += `**最大震度**: ${intensity}\n`
     }
     
+    // WarnAreaからの詳細震度情報を追加
+    if (wolfixData.WarnArea && wolfixData.WarnArea.length > 0) {
+        const intensityInfo = new Map<string, string[]>()
+        
+        for (const area of wolfixData.WarnArea) {
+            if (area.Shindo1) {
+                const intensity = normalizeIntensity(area.Shindo1)
+                if (!intensityInfo.has(intensity)) {
+                    intensityInfo.set(intensity, [])
+                }
+                if (area.Chiiki) {
+                    intensityInfo.get(intensity)!.push(area.Chiiki)
+                }
+            }
+        }
+        
+        // 震度の高い順にソート
+        const sortedIntensities = Array.from(intensityInfo.keys()).sort((a, b) => {
+            const numA = parseFloat(a.replace(/[-+弱強]/, ''))
+            const numB = parseFloat(b.replace(/[-+弱強]/, ''))
+            return numB - numA
+        })
+        
+        if (sortedIntensities.length > 0) {
+            description += `\n**各地の震度**:\n`
+            for (const intensity of sortedIntensities.slice(0, 5)) { // 上位5つまで表示
+                const areas = intensityInfo.get(intensity)!
+                const areaText = areas.slice(0, 3).join('、') + (areas.length > 3 ? ` など${areas.length}地点` : '')
+                description += `震度${intensity}: ${areaText}\n`
+            }
+        }
+    }
+    
     if (wolfixData.OriginTime) {
         description += `**発生時刻**: ${wolfixData.OriginTime}\n`
     }

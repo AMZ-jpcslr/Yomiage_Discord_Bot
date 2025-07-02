@@ -298,7 +298,8 @@ export async function generateEarthquakeMap(earthquakeData: EarthquakeData, area
             
             console.log(`震度表示: 座標[${coordinate[0]}, ${coordinate[1]}], 色:${color}, 文字:"${text}"`)
             
-            // 震度円を描画
+            // 地図では震度表示を無効化（ユーザーの要求により）
+            // 円のみ表示
             const circleRadius = seismic_intensity_config.circle
             
             svg.append('circle')
@@ -310,21 +311,8 @@ export async function generateEarthquakeMap(earthquakeData: EarthquakeData, area
                 .style('stroke-width', '2')
                 .style('filter', 'drop-shadow(1px 1px 3px rgba(0,0,0,0.6))')
             
-            // 震度数字を円の中央に表示
-            svg.append('text')
-                .attr('x', coordinate[0])
-                .attr('y', coordinate[1] + 2) // わずかに下にずらす
-                .attr('text-anchor', 'middle')
-                .style('font-family', seismic_intensity_config.font)
-                .style('font-size', `${seismic_intensity_config.fontsize}px`)
-                .style('font-weight', 'bold')
-                .style('fill', '#000000')
-                .style('stroke', '#ffffff')
-                .style('stroke-width', '1')
-                .style('paint-order', 'stroke fill')
-                .text(text)
-            
-            console.log(`震度円と数字"${text}"を座標[${coordinate[0]}, ${coordinate[1]}]に描画完了`)
+            console.log(`震度円を座標[${coordinate[0]}, ${coordinate[1]}]に描画完了（数字は非表示）`)
+        }
         }
         
         // Plot seismic intensity areas first (so epicenter appears on top)
