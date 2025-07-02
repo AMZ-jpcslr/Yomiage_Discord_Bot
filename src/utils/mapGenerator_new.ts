@@ -288,32 +288,47 @@ export async function generateEarthquakeMap(earthquakeData: EarthquakeData, area
             .style('stroke', stroke_color)
             .style('shape-rendering', 'geometricPrecision') // より精密な描画
         
-        // Seismic intensity plotting function (earthquake-alert/map-draw style)
+        // Seismic intensity plotting function (improved visualization)
         const Export = (area: [number, number], color: string, text: string) => {
             const coordinate = aProjection(area)
             if (!coordinate) return
             
-            // Draw circle background with improved visual quality
+            // 震度に応じてサイズを調整
+            const baseRadius = seismic_intensity_config.circle
+            const intensityValue = parseFloat(text.replace(/[-+]/, ''))
+            const radiusMultiplier = Math.max(0.8, 1 + (intensityValue - 3) * 0.1) // 震度3を基準にサイズ調整
+            const circleRadius = baseRadius * radiusMultiplier
+            
+            // Draw outer stroke circle for better visibility
             svg.append('circle')
-                .attr('r', seismic_intensity_config.circle)
+                .attr('r', circleRadius + 2)
+                .attr('cx', coordinate[0])
+                .attr('cy', coordinate[1])
+                .style('fill', '#ffffff')
+                .style('stroke', '#000000')
+                .style('stroke-width', '3')
+                .style('filter', 'drop-shadow(2px 2px 4px rgba(0,0,0,0.6))')
+            
+            // Draw main intensity circle with proper color
+            svg.append('circle')
+                .attr('r', circleRadius)
                 .attr('cx', coordinate[0])
                 .attr('cy', coordinate[1])
                 .style('fill', color)
                 .style('stroke', '#000000')
-                .style('stroke-width', '2') // より太い枠線
-                .style('filter', 'drop-shadow(1px 1px 2px rgba(0,0,0,0.5))') // 影を追加
+                .style('stroke-width', '2')
             
-            // Draw intensity text with better visibility
+            // Draw intensity text with high contrast
             svg.append('text')
                 .text(text)
-                .attr('x', coordinate[0] + seismic_intensity_config.width)
-                .attr('y', coordinate[1] + seismic_intensity_config.height)
-                .attr('font-size', seismic_intensity_config.fontsize)
+                .attr('x', coordinate[0])
+                .attr('y', coordinate[1] + 6) // テキストを円の中央に配置
+                .attr('font-size', Math.max(16, seismic_intensity_config.fontsize))
                 .attr('text-anchor', 'middle')
                 .attr('font-family', seismic_intensity_config.font)
-                .style('fill', '#000000')
+                .style('fill', intensityValue >= 5 ? '#ffffff' : '#000000') // 震度5以上は白文字
                 .style('font-weight', 'bold')
-                .style('text-shadow', '1px 1px 1px rgba(255,255,255,0.8)') // テキストに影を追加
+                .style('text-shadow', intensityValue >= 5 ? '1px 1px 2px rgba(0,0,0,0.8)' : '1px 1px 2px rgba(255,255,255,0.8)')
         }
         
         // Plot seismic intensity areas first (so epicenter appears on top)
@@ -342,17 +357,37 @@ export async function generateEarthquakeMap(earthquakeData: EarthquakeData, area
         
         console.log(`総観測点数: ${totalStations}`)
         if (totalStations === 0) {
-            console.warn('警告: 震度観測点データが見つかりませんでした。デフォルトで震源に表示します。')
+            console.warn('警告: 震度観測点データが見つかりませんでした。')
             console.warn('デバッグ: areas構造を確認:')
             console.warn('  - areas keys:', Object.keys(area_info.areas))
             console.warn('  - areas values:', Object.values(area_info.areas))
             
-            // 震度データがない場合、震源に最大震度を表示
+            // 震度データがない場合、震源に最大震度を適切な色で表示
             if (earthquakeData.maxScale && earthquakeData.maxScale !== '不明') {
                 const maxScaleText = earthquakeData.maxScale.toString()
-                const defaultColor = '#ff0000' // 赤色をデフォルトに
-                Export(epicenter, defaultColor, maxScaleText)
-                console.log(`震源に最大震度${maxScaleText}を表示しました`)
+                
+                // 震度に応じた色を選択
+                let intensityColor = '#ff0000' // デフォルト
+                const maxScaleValue = maxScaleText.replace(/[弱強\-+]/, '')
+                
+                if (seismic_intensity_color[maxScaleValue]) {
+                    intensityColor = seismic_intensity_color[maxScaleValue]
+                } else if (maxScaleText.includes('弱') || maxScaleText.includes('-')) {
+                    intensityColor = seismic_intensity_color[`under_${maxScaleValue}`] || intensityColor
+                } else if (maxScaleText.includes('強') || maxScaleText.includes('+')) {
+                    intensityColor = seismic_intensity_color[`over_${maxScaleValue}`] || intensityColor
+                }
+                
+                // 震度の表記を正規化
+                let normalizedText = maxScaleText
+                if (normalizedText.includes('弱')) {
+                    normalizedText = normalizedText.replace('弱', '-')
+                } else if (normalizedText.includes('強')) {
+                    normalizedText = normalizedText.replace('強', '+')
+                }
+                
+                Export(epicenter, intensityColor, normalizedText)
+                console.log(`震源に最大震度${normalizedText}を適切な色（${intensityColor}）で表示しました`)
             }
         }
         
@@ -500,65 +535,12 @@ export async function generateEarthquakeMap(earthquakeData: EarthquakeData, area
             .attr('font-family', copyright.font)
             .style('fill', copyright.color)
 
-        // 震度数字を右上に表示する機能
-        const maxScale = earthquakeData.maxScale
-        console.log(`震度右上表示: maxScale = "${maxScale}", type = ${typeof maxScale}`)
+        // 震度数字を右上に表示する機能を無効化
+        // const maxScale = earthquakeData.maxScale
+        // console.log(`震度右上表示: maxScale = "${maxScale}", type = ${typeof maxScale}`)
         
-        // 震度右上表示を有効化
-        if (maxScale && maxScale !== '不明' && maxScale !== '') {
-            // 震度数字を右上に大きく表示
-            let intensityText = maxScale.toString()
-            
-            // 震度の文字列を正規化
-            if (intensityText.includes('弱')) {
-                intensityText = intensityText.replace('弱', '-')
-            } else if (intensityText.includes('強')) {
-                intensityText = intensityText.replace('強', '+')
-            }
-            
-            console.log(`震度右上表示: 表示する震度 = "${intensityText}"`)
-            
-            const intensityFontSize = 100 // 大きなフォントサイズ
-            const rightMargin = 120
-            const topMargin = 100
-            
-            // 背景の角丸四角形を描画（視認性向上のため）
-            svg.append('rect')
-                .attr('x', width - rightMargin - 80)
-                .attr('y', topMargin - 60)
-                .attr('width', 160)
-                .attr('height', 120)
-                .attr('rx', 20)
-                .attr('ry', 20)
-                .style('fill', 'rgba(0, 0, 0, 0.8)')
-                .style('stroke', '#ffffff')
-                .style('stroke-width', '4')
-                .style('filter', 'drop-shadow(3px 3px 6px rgba(0,0,0,0.5))')
-            
-            // "Intensity"ラベルを描画（英語表記に変更）
-            svg.append('text')
-                .text('Max Intensity')
-                .attr('x', width - rightMargin)
-                .attr('y', topMargin - 20)
-                .attr('font-size', 24)
-                .attr('text-anchor', 'middle')
-                .attr('font-family', 'Arial Black, sans-serif')
-                .style('fill', '#ffffff')
-                .style('font-weight', 'bold')
-                .style('text-shadow', '2px 2px 4px rgba(0,0,0,0.8)')
-            
-            // 震度数字を描画
-            svg.append('text')
-                .text(intensityText)
-                .attr('x', width - rightMargin)
-                .attr('y', topMargin + 40)
-                .attr('font-size', intensityFontSize)
-                .attr('text-anchor', 'middle')
-                .attr('font-family', 'Arial Black, sans-serif')
-                .style('fill', '#ffffff')
-                .style('font-weight', 'bold')
-                .style('text-shadow', '3px 3px 6px rgba(0,0,0,0.9)')
-        }
+        // 震度右上表示を無効化（観測地点での震度表示を優先）
+        // 右上の最大震度表示は不要のため削除
         
         // Get SVG as HTML string with proper encoding
         const svgHtml = document.body.innerHTML
