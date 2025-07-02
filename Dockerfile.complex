@@ -51,7 +51,7 @@ RUN npm rebuild canvas --build-from-source --verbose
 COPY . .
 
 # Compile TypeScript
-RUN npm run compile
+RUN chmod +x scripts/postbuild.sh && npm run build
 
 # Create directories for generated images
 RUN mkdir -p /app/generated_images && \
