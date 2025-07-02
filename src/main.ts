@@ -10,7 +10,7 @@ import path from 'path'
 import { TextChannel } from 'discord.js'
 import WebSocket from 'ws'
 import { startEqAutoNotify } from './eq_notify'
-import { processP2PEarthquakeAlert, checkServerEnvironmentSupport, getServerEnvironmentInfo } from './utils/earthquake'
+import { createEarthquakeEmbedFromP2PData, processWolfixEEW, checkServerEnvironmentSupport, getServerEnvironmentInfo } from './utils/earthquake'
 import * as http from 'http'
 
 dotenv.config()
@@ -68,6 +68,9 @@ client.once('ready', () => {
     }, 5 * 60 * 1000) // 5分ごと（ミリ秒に修正）
 
     startEqAutoNotify(client)
+    
+    // Wolfix EEW API監視を開始
+    startWolfixEEWMonitoring(client)
 })
 
 // ヘルスチェック用のHTTPサーバー（Railwayの監視用）
@@ -171,7 +174,7 @@ ws.on('message', async (data) => {
             
             // P2P地震情報データを統一された処理関数で処理
             console.log('地震情報埋め込みの作成を開始...')
-            const result = await processP2PEarthquakeAlert(json)
+            const result = await createEarthquakeEmbedFromP2PData(json)
             if (!result) {
                 console.error('❌ P2P地震情報から埋め込み作成に失敗')
                 return
@@ -223,3 +226,98 @@ ws.on('message', async (data) => {
         console.error('地震速報通知エラー:', e)
     }
 })
+
+// Wolfix EEW API監視機能
+let lastWolfixEEWId: string | null = null
+
+async function startWolfixEEWMonitoring(client: Client) {
+    console.log('✅ Wolfix EEW API監視を開始')
+    
+    // 初回実行（既存の警報を取得してIDを設定、通知はしない）
+    try {
+        const initialData = await processWolfixEEW()
+        if (initialData && initialData.eewData) {
+            // 最初の警報IDを記録（通知は送信しない）
+            const eventId = initialData.eewData.EventID || new Date().getTime().toString()
+            lastWolfixEEWId = eventId
+            console.log(`初期化: 最新のWolfix EEW ID: ${lastWolfixEEWId}`)
+        }
+    } catch (error) {
+        console.error('Wolfix EEW初期化エラー:', error)
+    }
+    
+    // 30秒ごとにポーリング
+    setInterval(async () => {
+        try {
+            console.log('[Wolfix EEW] ポーリング実行中...')
+            const result = await processWolfixEEW()
+            
+            if (!result) {
+                console.log('[Wolfix EEW] データなし、またはエラー')
+                return
+            }
+            
+            const { embed, files, mapGenerated, eewData } = result
+            
+            if (!eewData) {
+                console.warn('[Wolfix EEW] EEWデータが不完全です')
+                return
+            }
+            
+            const currentEventId = eewData.EventID || new Date().getTime().toString()
+            
+            // 新しい警報かチェック
+            if (lastWolfixEEWId === currentEventId) {
+                console.log(`[Wolfix EEW] 同一イベント (ID: ${currentEventId})、スキップ`)
+                return
+            }
+            
+            console.log(`[Wolfix EEW] 新しい警報を検出! ID: ${currentEventId}`)
+            lastWolfixEEWId = currentEventId
+            
+            // 緊急地震速報用にタイトルと色を設定
+            embed.setTitle('【緊急地震速報】(Wolfix)')
+            embed.setColor(0xff4500) // オレンジレッド（P2Pと区別）
+            
+            console.log(`[Wolfix EEW] 埋め込み作成完了 - 地図生成: ${mapGenerated ? '成功' : '失敗'}, ファイル数: ${files?.length || 0}`)
+            
+            // 地図生成失敗時の警告
+            if (!mapGenerated) {
+                console.warn('[Wolfix EEW] ⚠️  地図が生成されませんでした')
+            }
+            
+            // 通知チャンネル取得
+            const channelsPath = path.join(__dirname, '../data/eq_channels.json')
+            if (!fs.existsSync(channelsPath)) {
+                console.log('[Wolfix EEW] 地震通知チャンネル設定ファイルが見つかりません')
+                return
+            }
+            
+            const channels = JSON.parse(fs.readFileSync(channelsPath, 'utf8'))
+            console.log(`[Wolfix EEW] 通知対象チャンネル数: ${Object.keys(channels).length}`)
+            
+            // 各チャンネルに通知送信
+            for (const guildId in channels) {
+                const channelId = channels[guildId]
+                const guild = client.guilds.cache.get(guildId)
+                if (!guild) {
+                    console.log(`[Wolfix EEW] ギルド ${guildId} が見つかりません`)
+                    continue
+                }
+                const channel = guild.channels.cache.get(channelId) as TextChannel
+                if (channel && channel.isTextBased()) {
+                    await channel.send({ 
+                        embeds: [embed], 
+                        files: files || [] 
+                    })
+                    console.log(`[Wolfix EEW] 緊急地震速報を送信: ${guild.name} - ${channel.name}`)
+                } else {
+                    console.log(`[Wolfix EEW] チャンネル ${channelId} が見つからないか、テキストチャンネルではありません`)
+                }
+            }
+            
+        } catch (error) {
+            console.error('[Wolfix EEW] 監視エラー:', error)
+        }
+    }, 30000) // 30秒間隔
+}

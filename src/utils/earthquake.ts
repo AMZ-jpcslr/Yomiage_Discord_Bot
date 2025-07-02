@@ -1159,135 +1159,264 @@ async function createEarthquakeEmbedFromData(detailData: Record<string, unknown>
     }
 }
 
-// P2P地震情報データからJMAの地震IDを特定する関数
-export async function findJMAEarthquakeId(p2pData: P2PEarthquakeData): Promise<string | null> {
+// ===== Wolfix緊急地震速報API機能 =====
+
+// Wolfix緊急地震速報APIのデータ型定義
+interface WolfixEEWData {
+    Title?: string
+    CodeType?: string
+    Issue?: {
+        Source?: string
+        Status?: string
+    }
+    EventID?: string
+    Serial?: number
+    AnnouncedTime?: string
+    OriginTime?: string
+    Hypocenter?: string
+    Latitude?: number
+    Longitude?: number
+    Magunitude?: number  // APIのフィールド名（typo?）
+    Depth?: number
+    MaxIntensity?: string
+    Accuracy?: {
+        Epicenter?: string
+        Depth?: string
+        Magnitude?: string
+    }
+    MaxIntChange?: {
+        String?: string
+        Reason?: string
+    }
+    WarnArea?: Array<unknown>
+    isSea?: boolean
+    isTraining?: boolean
+    isAssumption?: boolean
+    isWarn?: boolean
+    isFinal?: boolean
+    isCancel?: boolean
+    OriginalText?: string
+    Pond?: string
+}
+
+// Wolfix緊急地震速報APIから最新データを取得
+export async function fetchWolfixEEW(): Promise<WolfixEEWData | null> {
     try {
-        console.log('=== JMA地震情報一覧を取得中... ===')
-        const res = await fetch('https://www.jma.go.jp/bosai/quake/data/list.json')
-        const list = await res.json() as { json: string, anm: string }[]
+        console.log('=== Wolfix緊急地震速報API取得開始 ===')
+        const response = await fetch('https://api.wolfx.jp/jma_eew.json')
         
-        if (!list.length) {
-            console.log('❌ JMA地震情報一覧が空です')
-            return null
-        }
-
-        console.log(`📋 JMA地震情報 ${list.length}件を取得`)
-
-        // P2P地震情報から基本情報を抽出（安全な型チェック）
-        if (!p2pData.time) {
-            console.log('❌ P2P地震情報に時刻データがありません')
+        if (!response.ok) {
+            console.error(`Wolfix API HTTPエラー: ${response.status} ${response.statusText}`)
             return null
         }
         
-        const p2pTime = new Date(p2pData.time)
-        // 震源地名は複数の場所から取得可能
-        const p2pHypocenter = p2pData.earthquake?.hypocenter?.name || p2pData.hypocenter?.name
-        // マグニチュードも複数の場所から取得可能
-        const p2pMagnitude = parseFloat(String(p2pData.earthquake?.magnitude || p2pData.magnitude || 0))
+        const data = await response.json() as WolfixEEWData
+        console.log('Wolfix EEWデータ取得成功:', JSON.stringify(data, null, 2))
+        return data
         
-        console.log(`🔍 P2P情報 - 時刻: ${p2pTime.toISOString()}, 震源: ${p2pHypocenter}, M: ${p2pMagnitude}`)
-
-        // 直近の地震情報から類似するものを検索（最新30件を確認）
-        for (let i = 0; i < Math.min(30, list.length); i++) {
-            const item = list[i]
-            try {
-                console.log(`🔍 JMA地震情報 ${i + 1}/${Math.min(30, list.length)}: ${item.json} (${item.anm})`)
-                
-                const detailRes = await fetch(`https://www.jma.go.jp/bosai/quake/data/${item.json}`)
-                const detail = await detailRes.json() as Record<string, unknown>
-                
-                const jmaTimeStr = safeGet(detail, 'Body.Earthquake.OriginTime') || safeGet(detail, 'Head.ReportDateTime')
-                if (!jmaTimeStr) {
-                    console.log(`⚠️  時刻情報なし - スキップ`)
-                    continue
-                }
-                
-                const jmaTime = new Date(jmaTimeStr)
-                const jmaHypocenter = safeGet(detail, 'Body.Earthquake.Hypocenter.Area.Name')
-                const jmaMagnitude = parseFloat(safeGet(detail, 'Body.Earthquake.Magnitude') || '0')
-                
-                // 時刻の差を計算
-                const timeDiff = Math.abs(p2pTime.getTime() - jmaTime.getTime())
-                const timeDiffMinutes = timeDiff / (1000 * 60)
-                
-                console.log(`⏰ 時刻差: ${timeDiffMinutes.toFixed(1)}分, 震源: ${jmaHypocenter}, M: ${jmaMagnitude}`)
-                
-                // 時刻による絞り込み（最初に2時間以内、見つからなければ段階的に拡大）
-                let maxTimeDiffMinutes = 120 // 最初は2時間以内
-                if (i > 10) maxTimeDiffMinutes = 360 // 10件目以降は6時間以内
-                if (i > 20) maxTimeDiffMinutes = 1440 // 20件目以降は24時間以内
-                
-                if (timeDiffMinutes <= maxTimeDiffMinutes) {
-                    // 震源地名の類似性をチェック（部分一致）
-                    const hypoMatch = !!(p2pHypocenter && jmaHypocenter && 
-                        (p2pHypocenter.includes(jmaHypocenter) || jmaHypocenter.includes(p2pHypocenter)))
-                    
-                    // マグニチュードの類似性をチェック（±1.0以内、緊急地震速報では精度が低い場合がある）
-                    const magMatch = p2pMagnitude > 0 && jmaMagnitude > 0 && 
-                        Math.abs(p2pMagnitude - jmaMagnitude) <= 1.0
-                    
-                    console.log(`🎯 マッチング結果 - 震源: ${hypoMatch ? '✅' : '❌'}, マグニチュード: ${magMatch ? '✅' : '❌'}`)
-                    
-                    // 条件に応じたマッチング
-                    let isMatch = false
-                    
-                    if (timeDiffMinutes <= 30) {
-                        // 30分以内なら震源地またはマグニチュードのいずれかが一致すれば採用
-                        isMatch = hypoMatch || magMatch
-                    } else if (timeDiffMinutes <= 120) {
-                        // 2時間以内なら震源地とマグニチュード両方が一致する必要
-                        isMatch = hypoMatch && magMatch
-                    } else {
-                        // それ以上は厳密な一致が必要
-                        isMatch = hypoMatch && magMatch && timeDiffMinutes <= maxTimeDiffMinutes
-                    }
-                    
-                    if (isMatch) {
-                        console.log(`✅ JMA地震ID ${item.json} が P2P地震情報と一致 (時刻差: ${timeDiffMinutes.toFixed(1)}分)`)
-                        return item.json
-                    }
-                } else if (i < 10) {
-                    console.log(`⏭️  時刻差が大きすぎます (${timeDiffMinutes.toFixed(1)}分 > ${maxTimeDiffMinutes}分)`)
-                }
-            } catch (error) {
-                console.error(`❌ JMA地震詳細データ取得エラー (${item.json}):`, error)
-                continue
-            }
-        }
-        
-        console.log('⚠️  P2P地震情報に対応するJMA地震IDが見つかりませんでした')
-        console.log('📝 フォールバック処理（P2P→JMA変換）を使用します')
-        return null
     } catch (error) {
-        console.error('❌ JMA地震ID検索中にエラー:', error)
+        console.error('Wolfix EEW取得エラー:', error)
         return null
     }
 }
 
-// P2P地震情報を受信した際のメイン処理関数
-export async function processP2PEarthquakeAlert(p2pData: P2PEarthquakeData): Promise<{ embed: EmbedBuilder, files?: AttachmentBuilder[], mapGenerated?: boolean } | null> {
-    try {
-        console.log('=== P2P地震情報の処理開始 ===')
-        
-        // まずJMAの地震IDを特定を試行
-        const jmaEarthquakeId = await findJMAEarthquakeId(p2pData)
-        
-        if (jmaEarthquakeId) {
-            console.log(`✅ JMA地震ID ${jmaEarthquakeId} を使用して地震情報を取得`)
-            // JMAの地震IDが特定できた場合は、統一された関数を使用
-            const result = await createEarthquakeEmbed(jmaEarthquakeId, true)
-            return {
-                embed: result.embed,
-                files: result.files,
-                mapGenerated: result.files && result.files.length > 0
-            }
-        } else {
-            console.log('⚠️  JMA地震IDが特定できないため、P2Pデータから直接生成')
-            // フォールバック: P2Pデータから直接生成
-            return await createEarthquakeEmbedFromP2PData(p2pData)
+// WolfixデータをJMA互換形式に変換
+export function convertWolfixToJMAFormat(wolfixData: WolfixEEWData): Record<string, unknown> {
+    console.log('=== Wolfix→JMA変換を開始 ===')
+    
+    // 時刻情報の変換（"2025/07/02 09:07:46" → ISO形式）
+    const announcedTime = wolfixData.AnnouncedTime || new Date().toISOString()
+    
+    // 日本時間形式をISO形式に変換
+    const convertJapanTimeToISO = (japanTimeStr: string): string => {
+        try {
+            // "2025/07/02 09:07:46" → "2025-07-02T09:07:46+09:00"
+            const [datePart, timePart] = japanTimeStr.split(' ')
+            const [year, month, day] = datePart.split('/')
+            const isoString = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}T${timePart}+09:00`
+            return isoString
+        } catch (error) {
+            console.error('時刻変換エラー:', error)
+            return new Date().toISOString()
         }
+    }
+    
+    const reportDateTime = convertJapanTimeToISO(announcedTime)
+    
+    // 震源地情報
+    const hypocenterName = wolfixData.Hypocenter || '不明'
+    const latitude = wolfixData.Latitude || 35.68  // デフォルト（東京）
+    const longitude = wolfixData.Longitude || 139.69
+    const depth = wolfixData.Depth ? `${wolfixData.Depth}km` : '不明'
+    
+    // マグニチュード（APIのtypoに対応）
+    const magnitude = wolfixData.Magunitude?.toString() || '不明'
+    
+    // 最大震度
+    const maxIntensity = wolfixData.MaxIntensity || '不明'
+    
+    console.log('Wolfix変換情報:')
+    console.log('- 震源:', hypocenterName)
+    console.log('- 座標:', `${latitude}°N, ${longitude}°E`)
+    console.log('- マグニチュード:', magnitude)
+    console.log('- 最大震度:', maxIntensity)
+    console.log('- 深さ:', depth)
+    
+    // 震源座標を含むJMA互換構造を作成
+    const jmaFormat = {
+        Head: {
+            ReportDateTime: reportDateTime,
+            Text: `${wolfixData.Title || '緊急地震速報'}（Wolfix API）`
+        },
+        Body: {
+            Earthquake: {
+                Hypocenter: {
+                    Area: {
+                        Name: hypocenterName,
+                        Depth: depth,
+                        Coordinate: {
+                            '#text': `${longitude}/${latitude}`
+                        }
+                    }
+                },
+                Magnitude: magnitude
+            },
+            Intensity: {
+                Observation: {
+                    MaxInt: maxIntensity
+                }
+            }
+        }
+    }
+    
+    console.log('=== Wolfix→JMA変換完了 ===')
+    console.log('変換結果:', JSON.stringify(jmaFormat, null, 2))
+    return jmaFormat
+}
+
+// Wolfix緊急地震速報の埋め込みを作成
+export async function createWolfixEEWEmbed(wolfixData: WolfixEEWData): Promise<{ embed: EmbedBuilder, files?: AttachmentBuilder[], mapGenerated?: boolean } | null> {
+    try {
+        console.log('=== Wolfix EEW埋め込み作成開始 ===')
+        
+        // WolfixデータをJMA互換形式に変換
+        const jmaCompatibleData = convertWolfixToJMAFormat(wolfixData)
+        
+        // 既存のJMA互換処理関数を使用
+        const result = await createEarthquakeEmbedFromData(jmaCompatibleData, true)
+        
+        // Wolfix特有の情報を追加
+        if (result.embed) {
+            // タイトルを緊急地震速報に設定
+            result.embed.setTitle('【緊急地震速報】')
+            result.embed.setColor(0xff0000) // 赤色
+            
+            // Wolfix特有の情報をフィールドに追加
+            const fields = result.embed.data.fields || []
+            
+            // シリアル番号とイベントIDを追加
+            if (wolfixData.Serial) {
+                fields.push({
+                    name: '報番号',
+                    value: `第${wolfixData.Serial}報`,
+                    inline: true
+                })
+            }
+            
+            if (wolfixData.EventID) {
+                fields.push({
+                    name: 'イベントID',
+                    value: wolfixData.EventID,
+                    inline: true
+                })
+            }
+            
+            // 状態情報
+            const statusInfo = []
+            if (wolfixData.isFinal) statusInfo.push('最終報')
+            if (wolfixData.isWarn) statusInfo.push('警報')
+            if (wolfixData.isCancel) statusInfo.push('キャンセル')
+            if (wolfixData.isTraining) statusInfo.push('訓練')
+            
+            if (statusInfo.length > 0) {
+                fields.push({
+                    name: '状態',
+                    value: statusInfo.join('・'),
+                    inline: true
+                })
+            }
+            
+            // 精度情報
+            if (wolfixData.Accuracy) {
+                const accuracyInfo = []
+                if (wolfixData.Accuracy.Epicenter) accuracyInfo.push(`震源: ${wolfixData.Accuracy.Epicenter}`)
+                if (wolfixData.Accuracy.Magnitude) accuracyInfo.push(`M: ${wolfixData.Accuracy.Magnitude}`)
+                if (wolfixData.Accuracy.Depth) accuracyInfo.push(`深さ: ${wolfixData.Accuracy.Depth}`)
+                
+                if (accuracyInfo.length > 0) {
+                    fields.push({
+                        name: '精度情報',
+                        value: accuracyInfo.join('\n'),
+                        inline: false
+                    })
+                }
+            }
+            
+            result.embed.setFields(fields)
+            
+            // フッターにAPI情報を追加
+            result.embed.setFooter({
+                text: `データ提供: Wolfix API | 発表時刻: ${wolfixData.AnnouncedTime || '不明'}`
+            })
+        }
+        
+        console.log('✅ Wolfix EEW埋め込み作成完了')
+        return result
+        
     } catch (error) {
-        console.error('P2P地震情報処理中にエラー:', error)
+        console.error('❌ Wolfix EEW埋め込み作成エラー:', error)
+        return null
+    }
+}
+
+// Wolfix緊急地震速報を処理する統合関数
+export async function processWolfixEEW(): Promise<{ embed: EmbedBuilder, files?: AttachmentBuilder[], mapGenerated?: boolean, eewData?: WolfixEEWData } | null> {
+    try {
+        console.log('=== Wolfix緊急地震速報処理開始 ===')
+        
+        // Wolfix APIから最新データを取得
+        const wolfixData = await fetchWolfixEEW()
+        if (!wolfixData) {
+            console.error('❌ Wolfix EEWデータの取得に失敗')
+            return null
+        }
+        
+        // キャンセル報や訓練報の場合はスキップ（設定可能）
+        if (wolfixData.isCancel) {
+            console.log('⚠️ キャンセル報のためスキップ')
+            return null
+        }
+        
+        if (wolfixData.isTraining && process.env.SKIP_TRAINING_EEW !== 'false') {
+            console.log('⚠️ 訓練報のためスキップ（SKIP_TRAINING_EEW環境変数で制御可能）')
+            return null
+        }
+        
+        // 埋め込みを作成
+        const result = await createWolfixEEWEmbed(wolfixData)
+        if (!result) {
+            console.error('❌ Wolfix EEW埋め込み作成に失敗')
+            return null
+        }
+        
+        console.log('✅ Wolfix緊急地震速報処理完了')
+        return {
+            ...result,
+            eewData: wolfixData
+        }
+        
+    } catch (error) {
+        console.error('❌ Wolfix緊急地震速報処理エラー:', error)
         return null
     }
 }

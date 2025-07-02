@@ -104,6 +104,8 @@ client.once('ready', () => {
         console.log(`Bot起動中！Ping: ${ping}ms / サーバー数: ${guildCount}`);
     }, 5 * 60 * 1000); // 5分ごと（ミリ秒に修正）
     (0, eq_notify_1.startEqAutoNotify)(client);
+    // Wolfix EEW API監視を開始
+    startWolfixEEWMonitoring(client);
 });
 // ヘルスチェック用のHTTPサーバー（Railwayの監視用）
 const port = process.env.PORT || 3000;
@@ -194,7 +196,7 @@ ws.on('message', (data) => __awaiter(void 0, void 0, void 0, function* () {
             console.log('受信時刻:', new Date().toISOString());
             // P2P地震情報データを統一された処理関数で処理
             console.log('地震情報埋め込みの作成を開始...');
-            const result = yield (0, earthquake_1.processP2PEarthquakeAlert)(json);
+            const result = yield (0, earthquake_1.createEarthquakeEmbedFromP2PData)(json);
             if (!result) {
                 console.error('❌ P2P地震情報から埋め込み作成に失敗');
                 return;
@@ -243,3 +245,86 @@ ws.on('message', (data) => __awaiter(void 0, void 0, void 0, function* () {
         console.error('地震速報通知エラー:', e);
     }
 }));
+// Wolfix EEW API監視機能
+let lastWolfixEEWId = null;
+function startWolfixEEWMonitoring(client) {
+    return __awaiter(this, void 0, void 0, function* () {
+        console.log('✅ Wolfix EEW API監視を開始');
+        // 初回実行（既存の警報を取得してIDを設定、通知はしない）
+        try {
+            const initialData = yield (0, earthquake_1.processWolfixEEW)();
+            if (initialData && initialData.eewData) {
+                // 最初の警報IDを記録（通知は送信しない）
+                const eventId = initialData.eewData.EventID || new Date().getTime().toString();
+                lastWolfixEEWId = eventId;
+                console.log(`初期化: 最新のWolfix EEW ID: ${lastWolfixEEWId}`);
+            }
+        }
+        catch (error) {
+            console.error('Wolfix EEW初期化エラー:', error);
+        }
+        // 30秒ごとにポーリング
+        setInterval(() => __awaiter(this, void 0, void 0, function* () {
+            try {
+                console.log('[Wolfix EEW] ポーリング実行中...');
+                const result = yield (0, earthquake_1.processWolfixEEW)();
+                if (!result) {
+                    console.log('[Wolfix EEW] データなし、またはエラー');
+                    return;
+                }
+                const { embed, files, mapGenerated, eewData } = result;
+                if (!eewData) {
+                    console.warn('[Wolfix EEW] EEWデータが不完全です');
+                    return;
+                }
+                const currentEventId = eewData.EventID || new Date().getTime().toString();
+                // 新しい警報かチェック
+                if (lastWolfixEEWId === currentEventId) {
+                    console.log(`[Wolfix EEW] 同一イベント (ID: ${currentEventId})、スキップ`);
+                    return;
+                }
+                console.log(`[Wolfix EEW] 新しい警報を検出! ID: ${currentEventId}`);
+                lastWolfixEEWId = currentEventId;
+                // 緊急地震速報用にタイトルと色を設定
+                embed.setTitle('【緊急地震速報】(Wolfix)');
+                embed.setColor(0xff4500); // オレンジレッド（P2Pと区別）
+                console.log(`[Wolfix EEW] 埋め込み作成完了 - 地図生成: ${mapGenerated ? '成功' : '失敗'}, ファイル数: ${(files === null || files === void 0 ? void 0 : files.length) || 0}`);
+                // 地図生成失敗時の警告
+                if (!mapGenerated) {
+                    console.warn('[Wolfix EEW] ⚠️  地図が生成されませんでした');
+                }
+                // 通知チャンネル取得
+                const channelsPath = path_1.default.join(__dirname, '../data/eq_channels.json');
+                if (!fs_1.default.existsSync(channelsPath)) {
+                    console.log('[Wolfix EEW] 地震通知チャンネル設定ファイルが見つかりません');
+                    return;
+                }
+                const channels = JSON.parse(fs_1.default.readFileSync(channelsPath, 'utf8'));
+                console.log(`[Wolfix EEW] 通知対象チャンネル数: ${Object.keys(channels).length}`);
+                // 各チャンネルに通知送信
+                for (const guildId in channels) {
+                    const channelId = channels[guildId];
+                    const guild = client.guilds.cache.get(guildId);
+                    if (!guild) {
+                        console.log(`[Wolfix EEW] ギルド ${guildId} が見つかりません`);
+                        continue;
+                    }
+                    const channel = guild.channels.cache.get(channelId);
+                    if (channel && channel.isTextBased()) {
+                        yield channel.send({
+                            embeds: [embed],
+                            files: files || []
+                        });
+                        console.log(`[Wolfix EEW] 緊急地震速報を送信: ${guild.name} - ${channel.name}`);
+                    }
+                    else {
+                        console.log(`[Wolfix EEW] チャンネル ${channelId} が見つからないか、テキストチャンネルではありません`);
+                    }
+                }
+            }
+            catch (error) {
+                console.error('[Wolfix EEW] 監視エラー:', error);
+            }
+        }), 30000); // 30秒間隔
+    });
+}

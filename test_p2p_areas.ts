@@ -1,5 +1,5 @@
 // Test script for P2P earthquake alert area data conversion
-import { processP2PEarthquakeAlert } from './src/utils/earthquake'
+import { createEarthquakeEmbedFromP2PData } from './src/utils/earthquake'
 
 // Mock P2P earthquake data with areas (based on typical P2P EEW format)
 const mockP2PData = {
@@ -37,7 +37,7 @@ async function testP2PConversion() {
     console.log('テストデータ:', JSON.stringify(mockP2PData, null, 2))
     
     try {
-        const result = await processP2PEarthquakeAlert(mockP2PData)
+        const result = await createEarthquakeEmbedFromP2PData(mockP2PData)
         if (result) {
             console.log('✅ P2P変換成功')
             console.log('埋め込みタイトル:', result.embed.data.title)
