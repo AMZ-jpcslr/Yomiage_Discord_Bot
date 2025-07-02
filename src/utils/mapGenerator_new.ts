@@ -225,6 +225,30 @@ export async function generateEarthquakeMap(earthquakeData: EarthquakeData, area
             .scale(def_scale * _scale)
             .precision(0.1) // 投影精度を向上
         
+        console.log('=== 地図投影設定詳細 ===')
+        console.log(`投影中心: [${center[0]}, ${center[1]}]`)
+        console.log(`投影スケール: ${def_scale} * ${_scale} = ${def_scale * _scale}`)
+        console.log(`画面サイズ: ${width}x${height}`)
+        console.log(`translate: [${width / 2}, ${height / 2}]`)
+        
+        // 投影の境界確認
+        const topLeft = aProjection.invert([0, 0])
+        const bottomRight = aProjection.invert([width, height])
+        if (topLeft && bottomRight) {
+            console.log(`投影範囲: 左上[${topLeft[0].toFixed(3)}, ${topLeft[1].toFixed(3)}] - 右下[${bottomRight[0].toFixed(3)}, ${bottomRight[1].toFixed(3)}]`)
+        }
+        
+        // 震源地が投影範囲内にあるかチェック
+        const isInBounds = epicenter[0] >= (topLeft?.[0] || 0) && 
+                          epicenter[0] <= (bottomRight?.[0] || 0) && 
+                          epicenter[1] >= (bottomRight?.[1] || 0) && 
+                          epicenter[1] <= (topLeft?.[1] || 0)
+        console.log(`震源地が投影範囲内: ${isInBounds ? '✅' : '❌'}`)
+        
+        if (!isInBounds) {
+            console.warn('⚠️ 震源地が投影範囲外にあります。これが位置ずれの原因の可能性があります。')
+        }
+        
         const geoPath = d3.geoPath()
             .projection(aProjection)
         
@@ -347,6 +371,30 @@ export async function generateEarthquakeMap(earthquakeData: EarthquakeData, area
         console.log(`投影スケール: ${aProjection.scale()}`)
         console.log(`投影中心: [${aProjection.center()?.[0]}, ${aProjection.center()?.[1]}]`)
         
+        // 画面中央からのずれを計算
+        if (epicenterCoord) {
+            const centerX = width / 2
+            const centerY = height / 2
+            const offsetX = epicenterCoord[0] - centerX
+            const offsetY = epicenterCoord[1] - centerY
+            const offsetDistance = Math.sqrt(offsetX * offsetX + offsetY * offsetY)
+            
+            console.log(`画面中央: [${centerX}, ${centerY}]px`)
+            console.log(`震源地オフセット: [${offsetX.toFixed(1)}, ${offsetY.toFixed(1)}]px`)
+            console.log(`中央からの距離: ${offsetDistance.toFixed(1)}px`)
+            
+            if (offsetDistance > 100) {
+                console.warn(`⚠️ 震源地が画面中央から${offsetDistance.toFixed(0)}px離れています`)
+            }
+            
+            // 震源地が画面外にある場合の警告
+            if (epicenterCoord[0] < 0 || epicenterCoord[0] > width || 
+                epicenterCoord[1] < 0 || epicenterCoord[1] > height) {
+                console.error('❌ 震源地が画面外に描画されます！')
+                console.error(`位置: x=${epicenterCoord[0].toFixed(1)} (範囲: 0-${width}), y=${epicenterCoord[1].toFixed(1)} (範囲: 0-${height})`)
+            }
+        }
+        
         if (!epicenterCoord) {
             throw new Error('Failed to project epicenter coordinates')
         }
@@ -384,6 +432,56 @@ export async function generateEarthquakeMap(earthquakeData: EarthquakeData, area
             .attr('y2', epicenterCoord[1] - epicenter_config.size)
             .attr('stroke-width', epicenter_config.width)
             .style('stroke', epicenter_config.color)
+        
+        // 震源地位置の検証用: 既知の場所にマーカーを追加
+        console.log('=== 位置検証用マーカー追加 ===')
+        
+        // トカラ列島の主要な島々の座標
+        const referencePoints = [
+            { name: '悪石島', coords: [129.60, 29.45], color: '#00ff00' },
+            { name: '小宝島', coords: [129.22, 29.23], color: '#00ffff' },
+            { name: '宝島', coords: [129.20, 29.13], color: '#ffff00' }
+        ]
+        
+        // 震源地がトカラ列島近海の場合のみ参照マーカーを表示
+        if (earthquakeData.hypocenter && earthquakeData.hypocenter.includes('トカラ')) {
+            console.log('トカラ列島近海の地震のため、参照マーカーを追加します')
+            
+            for (const point of referencePoints) {
+                const refCoord = aProjection(point.coords)
+                if (refCoord) {
+                    // 参照点の円マーカー
+                    svg.append('circle')
+                        .attr('cx', refCoord[0])
+                        .attr('cy', refCoord[1])
+                        .attr('r', 8)
+                        .style('fill', point.color)
+                        .style('stroke', '#000000')
+                        .style('stroke-width', '2')
+                        .style('opacity', 0.8)
+                    
+                    // 参照点の名前ラベル
+                    svg.append('text')
+                        .text(point.name)
+                        .attr('x', refCoord[0] + 12)
+                        .attr('y', refCoord[1] + 4)
+                        .attr('font-size', 14)
+                        .attr('font-family', 'Arial')
+                        .style('fill', '#ffffff')
+                        .style('font-weight', 'bold')
+                        .style('text-shadow', '1px 1px 2px rgba(0,0,0,0.8)')
+                    
+                    console.log(`${point.name}: [${point.coords[0]}, ${point.coords[1]}] → [${refCoord[0].toFixed(1)}, ${refCoord[1].toFixed(1)}]px`)
+                    
+                    // 震源地との距離計算
+                    const distance = Math.sqrt(
+                        Math.pow(refCoord[0] - epicenterCoord[0], 2) + 
+                        Math.pow(refCoord[1] - epicenterCoord[1], 2)
+                    )
+                    console.log(`${point.name}から震源地までの画面上距離: ${distance.toFixed(1)}px`)
+                }
+            }
+        }
         
         // Add copyright (earthquake-alert/map-draw style)
         svg.append('text')
