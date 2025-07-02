@@ -90,11 +90,19 @@ export async function generateEarthquakeMap(earthquakeData: EarthquakeData, area
         // earthquake-alert/map-draw algorithm
         const epicenter: [number, number] = [earthquakeData.longitude, earthquakeData.latitude]
         
+        console.log('=== 震源地座標設定詳細 ===')
+        console.log(`earthquakeData.longitude: ${earthquakeData.longitude}`)
+        console.log(`earthquakeData.latitude: ${earthquakeData.latitude}`)
+        console.log(`epicenter配列: [${epicenter[0]}, ${epicenter[1]}]`)
+        console.log(`震源地: ${earthquakeData.hypocenter}`)
+        
         // Area info structure (use provided data or default)
         const area_info: AreaInfo = areaInfo || {
             epicenter: epicenter,
             areas: {}
         }
+        
+        console.log(`area_info.epicenter: [${area_info.epicenter[0]}, ${area_info.epicenter[1]}]`)
         
         // Extract config values (earthquake-alert/map-draw style)
         const width = config.width
@@ -151,6 +159,22 @@ export async function generateEarthquakeMap(earthquakeData: EarthquakeData, area
         
         const center: [number, number] = [sum_longitude / volume, sum_latitude / volume]
         const expansion_rate = longitude[0] - longitude[1] + latitude[0] - latitude[1]
+        
+        console.log('=== 地図中心計算詳細 ===')
+        console.log(`震源地座標: [${epicenter[0]}, ${epicenter[1]}]`)
+        console.log(`計算された中心: [${center[0]}, ${center[1]}]`)
+        console.log(`volume (座標点数): ${volume}`)
+        console.log(`expansion_rate: ${expansion_rate}`)
+        
+        // 震源地が中心から大きくずれていないかチェック
+        const centerOffset = Math.sqrt(
+            Math.pow(center[0] - epicenter[0], 2) + 
+            Math.pow(center[1] - epicenter[1], 2)
+        )
+        console.log(`中心からの震源地オフセット: ${centerOffset.toFixed(4)}度`)
+        if (centerOffset > 0.5) {
+            console.warn('⚠️ 震源地が地図中心から大きくずれています')
+        }
         
         // Scale calculation (earthquake-alert/map-draw algorithm) - 震源周辺をより詳細に表示
         let _scale: number
@@ -316,6 +340,13 @@ export async function generateEarthquakeMap(earthquakeData: EarthquakeData, area
         
         // Draw epicenter (earthquake-alert/map-draw style) - on top of intensity data
         const epicenterCoord = aProjection(epicenter)
+        console.log('=== 震源地描画詳細 ===')
+        console.log(`震源地座標: [${epicenter[0]}, ${epicenter[1]}] (経度, 緯度)`)
+        console.log(`投影後座標: [${epicenterCoord?.[0]}, ${epicenterCoord?.[1]}] (px)`)
+        console.log(`地図サイズ: ${width}x${height}px`)
+        console.log(`投影スケール: ${aProjection.scale()}`)
+        console.log(`投影中心: [${aProjection.center()?.[0]}, ${aProjection.center()?.[1]}]`)
+        
         if (!epicenterCoord) {
             throw new Error('Failed to project epicenter coordinates')
         }
