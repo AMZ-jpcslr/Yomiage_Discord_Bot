@@ -7,7 +7,8 @@
     "start": "node build/main.js",
     "start:prod": "NODE_ENV=production node build/main.js",
     "start:safe": "SKIP_MAP_GENERATION=true NODE_ENV=production node build/main.js",
-    "build": "tsc -p .",
+    "build": "tsc -p . && npm run postbuild",
+    "postbuild": "powershell -Command \"Copy-Item -Recurse build/src/* build/ -Force\"",
     "compile": "tsc -p .",
     "docker:build": "docker build -t earthquake-discord-bot .",
     "docker:run": "docker-compose up -d"
