@@ -3,7 +3,7 @@
  */
 
 import { SlashCommandBuilder, ChatInputCommandInteraction } from 'discord.js'
-import { getLatestEarthquakeInfo } from '../utils/earthquake'
+import { getLatestEarthquakeInfo } from '../utils/earthquake_new'
 
 export const data = new SlashCommandBuilder()
     .setName('get_eq')

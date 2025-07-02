@@ -1,30 +1,30 @@
 // 地震座標テスト
-import { processWolfixEEW } from './src/utils/earthquake'
+import { processEarthquakeAlert } from './src/utils/earthquake'
 
 async function testEarthquakeCoordinates() {
     console.log('=== 地震座標テスト開始 ===')
     
     try {
-        const result = await processWolfixEEW()
+        const result = await processEarthquakeAlert()
         
         if (!result) {
             console.log('❌ 結果なし（エラーまたはスキップ条件）')
             return
         }
         
-        const { eewData } = result
+        const { wolfixData } = result
         
-        if (eewData) {
+        if (wolfixData) {
             console.log('=== Wolfix EEW座標情報 ===')
-            console.log('震源地:', eewData.Hypocenter)
-            console.log('緯度:', eewData.Latitude)
-            console.log('経度:', eewData.Longitude)
-            console.log('深さ:', eewData.Depth)
-            console.log('マグニチュード:', eewData.Magunitude)
+            console.log('震源地:', wolfixData.Hypocenter)
+            console.log('緯度:', wolfixData.Latitude)
+            console.log('経度:', wolfixData.Longitude)
+            console.log('深さ:', wolfixData.Depth)
+            console.log('マグニチュード:', wolfixData.Magunitude)
             
-            if (eewData.Latitude && eewData.Longitude) {
-                console.log(`✅ 座標データ取得成功: ${eewData.Latitude}°N, ${eewData.Longitude}°E`)
-                console.log(`Google Maps: https://www.google.com/maps?q=${eewData.Latitude},${eewData.Longitude}`)
+            if (wolfixData.Latitude && wolfixData.Longitude) {
+                console.log(`✅ 座標データ取得成功: ${wolfixData.Latitude}°N, ${wolfixData.Longitude}°E`)
+                console.log(`Google Maps: https://www.google.com/maps?q=${wolfixData.Latitude},${wolfixData.Longitude}`)
             } else {
                 console.log('⚠️ 座標データが不完全です')
             }

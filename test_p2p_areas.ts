@@ -1,4 +1,6 @@
 // Test script for P2P earthquake alert area data conversion
+// 注意: このテストは新しいWolfix API専用システムでは使用されません
+/*
 import { createEarthquakeEmbedFromP2PData } from './src/utils/earthquake'
 
 // Mock P2P earthquake data with areas (based on typical P2P EEW format)
@@ -55,3 +57,7 @@ async function testP2PConversion() {
 if (require.main === module) {
     testP2PConversion()
 }
+*/
+
+console.log('このテストは新しいWolfix API専用システムでは無効化されています。')
+console.log('新しいシステムではWolfix APIのみを使用し、P2P地震情報は使用しません。')

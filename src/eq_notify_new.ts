@@ -3,7 +3,7 @@
  */
 
 import { Client, TextChannel } from 'discord.js'
-import { processEarthquakeAlert } from './utils/earthquake'
+import { processEarthquakeAlert } from './utils/earthquake_new'
 import * as fs from 'fs'
 import * as path from 'path'
 
