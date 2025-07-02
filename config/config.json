@@ -32,12 +32,12 @@
         "fontsize": 20,
         "height": 6,
         "width": 0,
-        "font": "Arial Black"
+        "font": "Arial Black, sans-serif"
     },
     "copyright": {
         "text": ["Earthquake Information by JMA", "Map Data: Prefecture Boundary Data"],
         "size": 18,
         "color": "#ffffff",
-        "font": "Arial"
+        "font": "Arial, sans-serif"
     }
 }

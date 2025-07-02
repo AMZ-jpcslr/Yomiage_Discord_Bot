@@ -85,7 +85,7 @@ export async function generateEarthquakeMap(earthquakeData: EarthquakeData, area
         const mapData = JSON.parse(fs.readFileSync(mapPath, 'utf8'))
         
         // Create JSDOM environment for SVG (earthquake-alert/map-draw style)
-        const document = new JSDOM('').window.document
+        const document = new JSDOM('<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body></body></html>').window.document
         
         // earthquake-alert/map-draw algorithm
         const epicenter: [number, number] = [earthquakeData.longitude, earthquakeData.latitude]
@@ -474,7 +474,7 @@ export async function generateEarthquakeMap(earthquakeData: EarthquakeData, area
                         .attr('x', refCoord[0] + 12)
                         .attr('y', refCoord[1] + 4)
                         .attr('font-size', 14)
-                        .attr('font-family', 'Arial')
+                        .attr('font-family', 'Arial, sans-serif')
                         .style('fill', '#ffffff')
                         .style('font-weight', 'bold')
                         .style('text-shadow', '1px 1px 2px rgba(0,0,0,0.8)')
@@ -500,12 +500,11 @@ export async function generateEarthquakeMap(earthquakeData: EarthquakeData, area
             .attr('font-family', copyright.font)
             .style('fill', copyright.color)
 
-        // 震度数字を右上に表示する機能（無効化）
-        // const maxScale = earthquakeData.maxScale
-        // console.log(`震度右上表示: maxScale = "${maxScale}", type = ${typeof maxScale}`)
+        // 震度数字を右上に表示する機能
+        const maxScale = earthquakeData.maxScale
+        console.log(`震度右上表示: maxScale = "${maxScale}", type = ${typeof maxScale}`)
         
-        // 震度右上表示を無効化
-        /*
+        // 震度右上表示を有効化
         if (maxScale && maxScale !== '不明' && maxScale !== '') {
             // 震度数字を右上に大きく表示
             let intensityText = maxScale.toString()
@@ -536,12 +535,12 @@ export async function generateEarthquakeMap(earthquakeData: EarthquakeData, area
                 .style('stroke-width', '4')
                 .style('filter', 'drop-shadow(3px 3px 6px rgba(0,0,0,0.5))')
             
-            // "震度"ラベルを描画
+            // "Intensity"ラベルを描画（英語表記に変更）
             svg.append('text')
-                .text('震度')
+                .text('Max Intensity')
                 .attr('x', width - rightMargin)
                 .attr('y', topMargin - 20)
-                .attr('font-size', 32)
+                .attr('font-size', 24)
                 .attr('text-anchor', 'middle')
                 .attr('font-family', 'Arial Black, sans-serif')
                 .style('fill', '#ffffff')
@@ -560,10 +559,12 @@ export async function generateEarthquakeMap(earthquakeData: EarthquakeData, area
                 .style('font-weight', 'bold')
                 .style('text-shadow', '3px 3px 6px rgba(0,0,0,0.9)')
         }
-        */
         
-        // Get SVG as HTML string
+        // Get SVG as HTML string with proper encoding
         const svgHtml = document.body.innerHTML
+        
+        // Add XML declaration and proper encoding for Japanese text
+        const svgWithEncoding = `<?xml version="1.0" encoding="UTF-8"?>\n${svgHtml}`
         
         // Convert SVG to PNG using Sharp
         const timestamp = Date.now()
@@ -581,9 +582,12 @@ export async function generateEarthquakeMap(earthquakeData: EarthquakeData, area
         
         const filepath = path.join(outputDir, filename)
         
-        // Convert SVG to PNG
-        await sharp(Buffer.from(svgHtml))
-            .png()
+        // Convert SVG to PNG with proper text rendering
+        await sharp(Buffer.from(svgWithEncoding, 'utf8'))
+            .png({
+                quality: 95,
+                progressive: true
+            })
             .toFile(filepath)
         
         console.log('✅ 地震マップ画像を生成しました:', filename)
