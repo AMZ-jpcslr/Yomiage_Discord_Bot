@@ -1284,6 +1284,7 @@ export function convertWolfixToJMAFormat(wolfixData: WolfixEEWData): Record<stri
     console.log('経度:', wolfixData.Longitude, '→', longitude)
     console.log('震源地:', hypocenterName)
     console.log('深さ:', depth)
+    console.log(`JMA座標文字列: "${latitude}/${longitude}" (緯度/経度形式)`)
     
     // マグニチュード（APIのtypoに対応）
     const magnitude = wolfixData.Magunitude?.toString() || '不明'
@@ -1311,7 +1312,7 @@ export function convertWolfixToJMAFormat(wolfixData: WolfixEEWData): Record<stri
                         Name: hypocenterName,
                         Depth: depth,
                         Coordinate: {
-                            '#text': `${longitude}/${latitude}`
+                            '#text': `${latitude}/${longitude}`  // JMA標準形式：緯度/経度
                         }
                     }
                 },

@@ -719,12 +719,13 @@ export function extractEarthquakeMapData(detail: EarthquakeDetail): { earthquake
                 console.log('配列内座標テキスト:', coordText)
                 const coords = coordText.split('/')
                 if (coords.length >= 2) {
-                    const newLon = parseFloat(coords[0])
-                    const newLat = parseFloat(coords[1])
+                    // JMA形式：緯度/経度 の順序
+                    const newLat = parseFloat(coords[0])  // 1番目が緯度
+                    const newLon = parseFloat(coords[1])  // 2番目が経度
                     if (!isNaN(newLon) && !isNaN(newLat)) {
                         longitude = newLon
                         latitude = newLat
-                        console.log(`✅ 配列形式から実座標取得成功: ${longitude}, ${latitude}`)
+                        console.log(`✅ 配列形式から実座標取得成功: 緯度=${latitude}, 経度=${longitude}`)
                     }
                 }
             }
@@ -735,12 +736,14 @@ export function extractEarthquakeMapData(detail: EarthquakeDetail): { earthquake
             console.log('座標テキスト:', coordText)
             const coords = coordText.split('/')
             if (coords.length >= 2) {
-                const newLon = parseFloat(coords[0])
-                const newLat = parseFloat(coords[1])
+                // JMA形式：緯度/経度 の順序
+                const newLat = parseFloat(coords[0])  // 1番目が緯度
+                const newLon = parseFloat(coords[1])  // 2番目が経度
                 if (!isNaN(newLon) && !isNaN(newLat)) {
                     longitude = newLon
                     latitude = newLat
-                    console.log(`✅ 単一形式から実座標取得成功: ${longitude}, ${latitude}`)
+                    console.log(`✅ 単一形式から実座標取得成功: 緯度=${latitude}, 経度=${longitude}`)
+                    console.log(`座標確認: ${coordText} → 緯度=${latitude}°N, 経度=${longitude}°E`)
                 }
             }
         }
