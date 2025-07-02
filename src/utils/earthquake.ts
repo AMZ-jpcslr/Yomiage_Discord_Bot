@@ -483,36 +483,73 @@ export function convertP2PtoJMAFormat(p2pData: P2PEarthquakeData): Record<string
         }
     }
     
-    // マグニチュードの取得（複数のフィールドをチェック）
+    // マグニチュードの取得（複数のフィールドをチェック、拡張版）
     let magnitudeValue = earthquakeData.magnitude ||
                           earthquakeData.mag ||
+                          earthquakeData.M ||
                           p2pRecord.magnitude || 
                           p2pRecord.mag ||
+                          p2pRecord.M ||
                           '不明'
+    
+    console.log('=== マグニチュード取得の詳細ログ ===')
+    console.log('earthquakeData.magnitude:', earthquakeData.magnitude)
+    console.log('earthquakeData.mag:', earthquakeData.mag)
+    console.log('earthquakeData.M:', earthquakeData.M)
+    console.log('p2pRecord.magnitude:', p2pRecord.magnitude)
+    console.log('p2pRecord.mag:', p2pRecord.mag)
+    console.log('p2pRecord.M:', p2pRecord.M)
+    console.log('初期magnitudeValue:', magnitudeValue)
     
     // P2P地震情報の緊急地震速報（code: 551）の場合の特別処理
     if (p2pRecord.code === 551) {
         console.log('緊急地震速報のマグニチュード取得を試行')
         
-        // 緊急地震速報特有のフィールドから取得を試行
+        // 緊急地震速報特有のフィールドから取得を試行（拡張版）
         const eewMagnitude = p2pRecord.magnitude || 
                             p2pRecord.mag ||
+                            p2pRecord.M ||
                             p2pRecord.magunitude || // タイポの可能性も考慮
                             (earthquakeData as Record<string, unknown>)?.magnitude ||
-                            (earthquakeData as Record<string, unknown>)?.mag
+                            (earthquakeData as Record<string, unknown>)?.mag ||
+                            (earthquakeData as Record<string, unknown>)?.M
+        
+        console.log('EEW専用フィールドチェック結果:', eewMagnitude)
         
         if (eewMagnitude && eewMagnitude !== '不明') {
             magnitudeValue = eewMagnitude
             console.log(`緊急地震速報からマグニチュード取得: ${eewMagnitude}`)
         }
+        
+        // 緊急地震速報でマグニチュードが取得できない場合の追加処理
+        if (magnitudeValue === '不明') {
+            console.log('=== EEWマグニチュード追加検索 ===')
+            
+            // P2Pの全フィールドからマグニチュード関連を探索
+            for (const [key, value] of Object.entries(p2pRecord)) {
+                if ((key.toLowerCase().includes('mag') || key.toLowerCase().includes('magnitude')) && 
+                    value && typeof value !== 'object') {
+                    console.log(`マグニチュード候補フィールド発見: ${key} = ${value}`)
+                    if (!isNaN(Number(value)) && Number(value) > 0 && Number(value) <= 10) {
+                        magnitudeValue = value
+                        console.log(`代替マグニチュード採用: ${key} = ${value}`)
+                        break
+                    }
+                }
+            }
+        }
     }
     
-    // マグニチュード値の正規化処理
-    if (magnitudeValue && magnitudeValue !== '不明') {
+    // マグニチュード値の正規化処理（改善版）
+    console.log('=== マグニチュード正規化処理 ===')
+    console.log('正規化前のmagnitudeValue:', magnitudeValue, 'typeof:', typeof magnitudeValue)
+    
+    if (magnitudeValue && magnitudeValue !== '不明' && magnitudeValue !== null && magnitudeValue !== 0) {
         const magStr = String(magnitudeValue)
+        console.log('マグニチュード文字列化:', magStr)
         
         // "M速報値"などの不適切な値を除去
-        if (magStr.includes('速報') || magStr.includes('未確定') || magStr.includes('調査中')) {
+        if (magStr.includes('速報') || magStr.includes('未確定') || magStr.includes('調査中') || magStr.includes('情報なし')) {
             console.log(`無効なマグニチュード値を検出: "${magStr}" -> "不明"に変更`)
             magnitudeValue = '不明'
         } 
@@ -526,6 +563,9 @@ export function convertP2PtoJMAFormat(p2pData: P2PEarthquakeData): Record<string
             console.log(`未対応のマグニチュード形式: "${magStr}" -> "不明"に変更`)
             magnitudeValue = '不明'
         }
+    } else {
+        console.log('マグニチュード情報なし、または無効な値のため"不明"を設定')
+        magnitudeValue = '不明'
     }
     
     // 最大震度の取得（P2P API特有のフィールド名）
@@ -638,6 +678,7 @@ export function convertP2PtoJMAFormat(p2pData: P2PEarthquakeData): Record<string
     // P2P地震情報のareasフィールドから地域震度情報を抽出
     if (p2pRecord.areas && Array.isArray(p2pRecord.areas)) {
         console.log('=== P2P areas配列から震度データを抽出 ===')
+        console.log(`areas配列の長さ: ${p2pRecord.areas.length}`)
         const areas = p2pRecord.areas as Array<Record<string, unknown>>
         const prefData: Record<string, unknown>[] = []
         
@@ -692,11 +733,16 @@ export function convertP2PtoJMAFormat(p2pData: P2PEarthquakeData): Record<string
         if (prefData.length > 0) {
             intensityObservation.Pref = prefData
             console.log(`✅ P2P から ${prefData.length} 個の地域震度データを変換しました`)
+            console.log('変換されたPrefデータの概要:')
+            prefData.forEach((pref, index) => {
+                console.log(`  地域${index + 1}: ${pref.Name}`)
+            })
         } else {
             console.log('⚠️  P2P areas配列から有効な震度データが見つかりませんでした')
         }
     } else {
         console.log('⚠️  P2P地震情報にareas配列が見つかりません - 震源のみの表示になります')
+        console.log('P2Pデータ構造:', Object.keys(p2pRecord))
     }
     
     // JMA API互換の構造を作成
