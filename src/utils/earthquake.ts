@@ -813,9 +813,39 @@ function createMapDataFromP2PInfo(detailData: Record<string, unknown>): { earthq
             return null
         }
         
-        // 震源の概算座標を取得（日本の主要地域の代表座標）
-        const coordinates = getApproximateCoordinates(hypocenter)
-        console.log('震源座標:', coordinates)
+        // 震源座標の取得（実座標 > 概算座標の順で優先）
+        let coordinates = { longitude: 139.69, latitude: 35.68 } // デフォルト（東京）
+        
+        // 実際の座標データが存在するかチェック
+        const coordData = safeGet(detailData, 'Body.Earthquake.Hypocenter.Area.Coordinate')
+        if (coordData && typeof coordData === 'object' && '#text' in coordData) {
+            const coordText = (coordData as { '#text': string })['#text']
+            if (typeof coordText === 'string') {
+                const coords = coordText.split('/')
+                if (coords.length >= 2) {
+                    const lon = parseFloat(coords[0])
+                    const lat = parseFloat(coords[1])
+                    if (!isNaN(lon) && !isNaN(lat)) {
+                        coordinates = { longitude: lon, latitude: lat }
+                        console.log(`実座標を使用: ${coordinates.longitude}, ${coordinates.latitude}`)
+                    } else {
+                        console.log('座標データの解析に失敗、概算座標を使用')
+                        coordinates = getApproximateCoordinates(hypocenter)
+                    }
+                } else {
+                    console.log('座標フォーマットが不正、概算座標を使用')
+                    coordinates = getApproximateCoordinates(hypocenter)
+                }
+            } else {
+                console.log('座標テキストが文字列でない、概算座標を使用')
+                coordinates = getApproximateCoordinates(hypocenter)
+            }
+        } else {
+            console.log('実座標データなし、概算座標を使用')
+            coordinates = getApproximateCoordinates(hypocenter)
+        }
+        
+        console.log('最終震源座標:', coordinates)
         
         // EarthquakeData型に合わせた地震データ構造を作成
         const earthquakeData = {
@@ -1248,6 +1278,12 @@ export function convertWolfixToJMAFormat(wolfixData: WolfixEEWData): Record<stri
     const latitude = wolfixData.Latitude || 35.68  // デフォルト（東京）
     const longitude = wolfixData.Longitude || 139.69
     const depth = wolfixData.Depth ? `${wolfixData.Depth}km` : '不明'
+    
+    console.log('=== Wolfix座標情報 ===')
+    console.log('緯度:', wolfixData.Latitude, '→', latitude)
+    console.log('経度:', wolfixData.Longitude, '→', longitude)
+    console.log('震源地:', hypocenterName)
+    console.log('深さ:', depth)
     
     // マグニチュード（APIのtypoに対応）
     const magnitude = wolfixData.Magunitude?.toString() || '不明'

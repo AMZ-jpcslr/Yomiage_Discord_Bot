@@ -558,6 +558,8 @@ interface EarthquakeDetail {
 
 // 震度データと地震情報を抽出する関数
 export function extractEarthquakeMapData(detail: EarthquakeDetail): { earthquakeData: EarthquakeData, areaInfo: AreaInfo } {
+    console.log('=== 地震座標データ抽出開始 ===')
+    
     // 座標情報の抽出（気象庁XMLフォーマットに対応）
     let longitude = 139.69 // デフォルト（東京）
     let latitude = 35.68   // デフォルト（東京）
@@ -565,34 +567,56 @@ export function extractEarthquakeMapData(detail: EarthquakeDetail): { earthquake
     // 複数の形式の座標情報に対応
     const hypocenterCoord = detail.Body?.Earthquake?.Hypocenter?.Area?.Coordinate
     
+    console.log('受信した座標データ:', JSON.stringify(hypocenterCoord, null, 2))
+    
     if (hypocenterCoord) {
         if (Array.isArray(hypocenterCoord)) {
             // 配列形式の場合
+            console.log('配列形式の座標データを処理中')
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const epicenterCoord = hypocenterCoord.find((coord: any) =>
                 coord['@type'] === 'epicenter' || coord.type === 'epicenter')
             if (epicenterCoord && epicenterCoord['#text']) {
                 const coordText = epicenterCoord['#text']
+                console.log('配列内座標テキスト:', coordText)
                 const coords = coordText.split('/')
                 if (coords.length >= 2) {
-                    longitude = parseFloat(coords[0]) || longitude
-                    latitude = parseFloat(coords[1]) || latitude
+                    const newLon = parseFloat(coords[0])
+                    const newLat = parseFloat(coords[1])
+                    if (!isNaN(newLon) && !isNaN(newLat)) {
+                        longitude = newLon
+                        latitude = newLat
+                        console.log(`✅ 配列形式から座標取得成功: ${longitude}, ${latitude}`)
+                    }
                 }
             }
         } else if (hypocenterCoord['#text']) {
             // 単一オブジェクト形式の場合
-            const coords = hypocenterCoord['#text'].split('/')
+            console.log('単一オブジェクト形式の座標データを処理中')
+            const coordText = hypocenterCoord['#text']
+            console.log('座標テキスト:', coordText)
+            const coords = coordText.split('/')
             if (coords.length >= 2) {
-                longitude = parseFloat(coords[0]) || longitude
-                latitude = parseFloat(coords[1]) || latitude
+                const newLon = parseFloat(coords[0])
+                const newLat = parseFloat(coords[1])
+                if (!isNaN(newLon) && !isNaN(newLat)) {
+                    longitude = newLon
+                    latitude = newLat
+                    console.log(`✅ 単一形式から座標取得成功: ${longitude}, ${latitude}`)
+                }
             }
         }
+    } else {
+        console.log('⚠️ 座標データが見つかりません')
     }
     
     // 代替方法：名前から推定される緯度経度
     const hypocenterName = detail.Body?.Earthquake?.Hypocenter?.Area?.Name || '不明'
+    console.log('震源地名:', hypocenterName)
+    
     if (longitude === 139.69 && latitude === 35.68) {
-        // デフォルト座標の場合、地名から推定
+        // デフォルト座標の場合のみ、地名から推定
+        console.log('⚠️ 実座標が取得できないため、地名から推定します')
         const locationMap: { [key: string]: [number, number] } = {
             'トカラ列島': [129.9, 29.2],
             'トカラ列島近海': [129.9, 29.2],
@@ -648,9 +672,16 @@ export function extractEarthquakeMapData(detail: EarthquakeDetail): { earthquake
             if (hypocenterName.includes(region)) {
                 longitude = coords[0]
                 latitude = coords[1]
+                console.log(`✅ 地名 "${region}" から座標推定: ${longitude}, ${latitude}`)
                 break
             }
         }
+        
+        if (longitude === 139.69 && latitude === 35.68) {
+            console.log('⚠️ 地名からも座標を推定できませんでした。デフォルト座標を使用します')
+        }
+    } else {
+        console.log('✅ 実座標データを使用します')
     }
     
     console.log(`震源座標: ${latitude}°N, ${longitude}°E (${hypocenterName})`)
