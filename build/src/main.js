@@ -74,9 +74,16 @@ const client = new discord_js_1.Client({
 });
 function setBotPresence() {
     if (client.user) {
+        const ping = client.ws.ping;
+        const isOnline = client.isReady();
+        const cpuUsage = process.cpuUsage();
+        const cpuPercent = Math.round((cpuUsage.user + cpuUsage.system) / 1000000); // CPU使用率の近似値
+        const statusText = isOnline
+            ? `稼働中 | Ping: ${ping}ms | CPU: ${cpuPercent}% | キヴォトスの最新情報を配信中`
+            : 'オフライン | キヴォトスの最新情報を配信中';
         client.user.setPresence({
-            activities: [{ name: 'キヴォトスの最新情報', type: 1 }],
-            status: 'online',
+            activities: [{ name: statusText, type: 1 }],
+            status: isOnline ? 'online' : 'dnd',
         });
     }
 }
@@ -97,12 +104,16 @@ client.once('ready', () => {
         console.log('=== 推奨設定 ===');
         envSupport.recommendations.forEach(rec => console.log(`💡 ${rec}`));
     }
-    // 5分ごとにPing値とサーバー数をターミナルに出力
+    // 10秒ごとにBotステータスを更新し、ターミナルにも出力
     setInterval(() => {
+        setBotPresence(); // ステータス更新
         const ping = client.ws.ping;
         const guildCount = client.guilds.cache.size;
-        console.log(`Bot起動中！Ping: ${ping}ms / サーバー数: ${guildCount}`);
-    }, 5 * 60 * 1000); // 5分ごと（ミリ秒に修正）
+        const isOnline = client.isReady();
+        const cpuUsage = process.cpuUsage();
+        const cpuPercent = Math.round((cpuUsage.user + cpuUsage.system) / 1000000);
+        console.log(`🤖 Bot状態: ${isOnline ? '稼働中' : 'オフライン'} | Ping: ${ping}ms | CPU: ${cpuPercent}% | サーバー数: ${guildCount} | キヴォトスの最新情報を配信中`);
+    }, 10 * 1000); // 10秒ごと
     (0, eq_notify_1.startEqAutoNotify)(client);
     // Wolfix EEW API監視を開始
     startWolfixEEWMonitoring(client);
