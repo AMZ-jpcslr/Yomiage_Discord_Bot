@@ -114,7 +114,6 @@ export async function generateEarthquakeMap(earthquakeData: EarthquakeData, area
         const land_color = config.land_color
         const stroke_color = config.stroke_color
         const seismic_intensity_color = config.seismic_intensity_color
-        const epicenter_config = config.epicenter
         const seismic_intensity_config = config.seismic_intensity
         const copyright = config.copyright
         
@@ -352,39 +351,64 @@ export async function generateEarthquakeMap(earthquakeData: EarthquakeData, area
         }
         
         console.log(`総観測点数: ${totalStations}`)
+        
+        // 震源地付近の震度を表示（添付画像のように）
+        // 震源地の震度を推定または設定
+        let epicenterIntensity = '1' // デフォルト
+        let epicenterColor = seismic_intensity_color['1'] || '#0080ff'
+        
+        // 1. 最大震度から震源地震度を推定
+        if (earthquakeData.maxScale && earthquakeData.maxScale !== '不明') {
+            const maxScale = earthquakeData.maxScale.toString()
+            const maxScaleNum = parseInt(maxScale.replace(/[弱強\-+]/, ''))
+            
+            // 震源地は通常最大震度と同等かそれ以下になることが多い
+            if (maxScaleNum >= 4) {
+                epicenterIntensity = maxScale
+            } else if (maxScaleNum >= 2) {
+                epicenterIntensity = Math.max(1, maxScaleNum - 1).toString()
+            } else {
+                epicenterIntensity = maxScale
+            }
+            
+            // 色を設定
+            if (seismic_intensity_color[epicenterIntensity]) {
+                epicenterColor = seismic_intensity_color[epicenterIntensity]
+            } else if (epicenterIntensity.includes('弱') || epicenterIntensity.includes('-')) {
+                const baseLevel = epicenterIntensity.replace(/[弱-]/, '')
+                epicenterColor = seismic_intensity_color[`under_${baseLevel}`] || epicenterColor
+            } else if (epicenterIntensity.includes('強') || epicenterIntensity.includes('+')) {
+                const baseLevel = epicenterIntensity.replace(/[強+]/, '')
+                epicenterColor = seismic_intensity_color[`over_${baseLevel}`] || epicenterColor
+            }
+        }
+        
+        // 2. WarnAreaに震源地に近い地域があれば、その震度を採用
+        if (area_info.areas && Object.keys(area_info.areas).length > 0) {
+            for (const [intensity, coords] of Object.entries(area_info.areas)) {
+                for (const coord of coords) {
+                    // 震源地から近い観測点（0.5度以内）の震度を採用
+                    const distance = Math.sqrt(
+                        Math.pow(coord[0] - epicenter[0], 2) + 
+                        Math.pow(coord[1] - epicenter[1], 2)
+                    )
+                    if (distance < 0.5) {
+                        epicenterIntensity = intensity
+                        epicenterColor = seismic_intensity_color[intensity] || epicenterColor
+                        console.log(`震源地付近の観測点から震度${intensity}を採用`)
+                        break
+                    }
+                }
+            }
+        }
+        
+        console.log(`震源地震度設定: 震度${epicenterIntensity}, 色:${epicenterColor}`)
+        
         if (totalStations === 0) {
             console.warn('警告: 震度観測点データが見つかりませんでした。')
             console.warn('デバッグ: areas構造を確認:')
             console.warn('  - areas keys:', Object.keys(area_info.areas))
             console.warn('  - areas values:', Object.values(area_info.areas))
-            
-            // 震度データがない場合、震源に最大震度を適切な色で表示
-            if (earthquakeData.maxScale && earthquakeData.maxScale !== '不明') {
-                const maxScaleText = earthquakeData.maxScale.toString()
-                
-                // 震度に応じた色を選択
-                let intensityColor = '#ff0000' // デフォルト
-                const maxScaleValue = maxScaleText.replace(/[弱強\-+]/, '')
-                
-                if (seismic_intensity_color[maxScaleValue]) {
-                    intensityColor = seismic_intensity_color[maxScaleValue]
-                } else if (maxScaleText.includes('弱') || maxScaleText.includes('-')) {
-                    intensityColor = seismic_intensity_color[`under_${maxScaleValue}`] || intensityColor
-                } else if (maxScaleText.includes('強') || maxScaleText.includes('+')) {
-                    intensityColor = seismic_intensity_color[`over_${maxScaleValue}`] || intensityColor
-                }
-                
-                // 震度の表記を正規化
-                let normalizedText = maxScaleText
-                if (normalizedText.includes('弱')) {
-                    normalizedText = normalizedText.replace('弱', '-')
-                } else if (normalizedText.includes('強')) {
-                    normalizedText = normalizedText.replace('強', '+')
-                }
-                
-                Export(epicenter, intensityColor, normalizedText)
-                console.log(`震源に最大震度${normalizedText}を適切な色（${intensityColor}）で表示しました`)
-            }
         }
         
         // 常に右上に震度を表示（地図に表示されない場合も含む）
@@ -438,39 +462,34 @@ export async function generateEarthquakeMap(earthquakeData: EarthquakeData, area
             throw new Error('Failed to project epicenter coordinates')
         }
         
-        // Epicenter X mark background (earthquake-alert/map-draw style)
-        svg.append('line')
-            .attr('x1', epicenterCoord[0] - epicenter_config.size - epicenter_config.stroke_width)
-            .attr('x2', epicenterCoord[0] + epicenter_config.size + epicenter_config.stroke_width)
-            .attr('y1', epicenterCoord[1] - epicenter_config.size - epicenter_config.stroke_width)
-            .attr('y2', epicenterCoord[1] + epicenter_config.size + epicenter_config.stroke_width)
-            .attr('stroke-width', epicenter_config.width + epicenter_config.stroke_width * 2)
-            .style('stroke', epicenter_config.stroke)
+        // 震源地に震度円と数字を表示（添付画像のように）
+        const circleRadius = seismic_intensity_config.circle
         
-        svg.append('line')
-            .attr('x1', epicenterCoord[0] - epicenter_config.size - epicenter_config.stroke_width)
-            .attr('x2', epicenterCoord[0] + epicenter_config.size + epicenter_config.stroke_width)
-            .attr('y1', epicenterCoord[1] + epicenter_config.size + epicenter_config.stroke_width)
-            .attr('y2', epicenterCoord[1] - epicenter_config.size - epicenter_config.stroke_width)
-            .attr('stroke-width', epicenter_config.width + epicenter_config.stroke_width * 2)
-            .style('stroke', epicenter_config.stroke)
+        // 震度円を描画
+        svg.append('circle')
+            .attr('r', circleRadius)
+            .attr('cx', epicenterCoord[0])
+            .attr('cy', epicenterCoord[1])
+            .style('fill', epicenterColor)
+            .style('stroke', '#000000')
+            .style('stroke-width', '2')
+            .style('filter', 'drop-shadow(1px 1px 3px rgba(0,0,0,0.6))')
         
-        // Epicenter X mark foreground (earthquake-alert/map-draw style)
-        svg.append('line')
-            .attr('x1', epicenterCoord[0] - epicenter_config.size)
-            .attr('x2', epicenterCoord[0] + epicenter_config.size)
-            .attr('y1', epicenterCoord[1] - epicenter_config.size)
-            .attr('y2', epicenterCoord[1] + epicenter_config.size)
-            .attr('stroke-width', epicenter_config.width)
-            .style('stroke', epicenter_config.color)
+        // 震度数字を円の中央に表示
+        svg.append('text')
+            .attr('x', epicenterCoord[0])
+            .attr('y', epicenterCoord[1] + 2) // わずかに下にずらす
+            .attr('text-anchor', 'middle')
+            .style('font-family', seismic_intensity_config.font)
+            .style('font-size', `${seismic_intensity_config.fontsize}px`)
+            .style('font-weight', 'bold')
+            .style('fill', '#000000')
+            .style('stroke', '#ffffff')
+            .style('stroke-width', '1')
+            .style('paint-order', 'stroke fill')
+            .text(epicenterIntensity)
         
-        svg.append('line')
-            .attr('x1', epicenterCoord[0] - epicenter_config.size)
-            .attr('x2', epicenterCoord[0] + epicenter_config.size)
-            .attr('y1', epicenterCoord[1] + epicenter_config.size)
-            .attr('y2', epicenterCoord[1] - epicenter_config.size)
-            .attr('stroke-width', epicenter_config.width)
-            .style('stroke', epicenter_config.color)
+        console.log(`震源地に震度円表示: 震度${epicenterIntensity}, 色:${epicenterColor}, 座標:[${epicenterCoord[0]}, ${epicenterCoord[1]}]`)
         
         // 震源地位置の検証用: 既知の場所にマーカーを追加
         console.log('=== 位置検証用マーカー追加 ===')

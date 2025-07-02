@@ -91,6 +91,16 @@ export async function fetchWolfixEarthquakeData(): Promise<WolfixEEWData | null>
         console.log(`最大震度: ${data.MaxIntensity}`)
         console.log(`WarnArea数: ${data.WarnArea?.length || 0}`)
         
+        // WarnAreaの詳細をデバッグ出力
+        if (data.WarnArea && data.WarnArea.length > 0) {
+            console.log('=== WarnArea詳細 ===')
+            data.WarnArea.forEach((area, index) => {
+                console.log(`[${index}] 地域: ${area.Chiiki}, 震度1: ${area.Shindo1}, 震度2: ${area.Shindo2}`)
+            })
+        } else {
+            console.log('⚠️ WarnAreaデータが空または存在しません')
+        }
+        
         return data
         
     } catch (error) {
@@ -151,13 +161,13 @@ function convertWarnAreaToMapAreas(warnAreas: WolfixEEWData['WarnArea']): { [key
     const areas: { [key: string]: [number, number][] } = {}
     
     if (!warnAreas || !Array.isArray(warnAreas)) {
-        console.log('WarnAreaデータなし - 震源地のみ表示')
+        console.log('⚠️ WarnAreaデータなし - 震源地のみ表示')
         return areas
     }
     
     console.log(`=== WarnArea処理開始 (${warnAreas.length}件) ===`)
     
-    // 地域名から座標への変換マップ
+    // 地域名から座標への変換マップ（より詳細に）
     const areaCoordinates: Record<string, [number, number]> = {
         // 九州・沖縄
         '鹿児島県十島村': [129.9, 29.2],
@@ -168,6 +178,7 @@ function convertWarnAreaToMapAreas(warnAreas: WolfixEEWData['WarnArea']): { [key
         '種子島': [131.0, 30.5],
         '屋久島': [130.5, 30.3],
         '沖縄県': [127.7, 26.2],
+        '沖縄本島': [127.7, 26.2],
         '福岡県': [130.4, 33.6],
         '佐賀県': [130.3, 33.2],
         '長崎県': [129.9, 32.8],
@@ -205,30 +216,59 @@ function convertWarnAreaToMapAreas(warnAreas: WolfixEEWData['WarnArea']): { [key
         '福井県': [136.2, 36.1],
         // 関東
         '東京都': [139.7, 35.7],
+        '東京': [139.7, 35.7],
         '神奈川県': [139.6, 35.4],
+        '神奈川': [139.6, 35.4],
         '千葉県': [140.1, 35.6],
+        '千葉': [140.1, 35.6],
         '埼玉県': [139.6, 36.0],
+        '埼玉': [139.6, 36.0],
         '茨城県': [140.4, 36.3],
+        '茨城': [140.4, 36.3],
         '栃木県': [139.9, 36.6],
+        '栃木': [139.9, 36.6],
         '群馬県': [139.0, 36.4],
+        '群馬': [139.0, 36.4],
         // 東北
         '宮城県': [140.9, 38.3],
+        '宮城': [140.9, 38.3],
         '福島県': [140.5, 37.8],
+        '福島': [140.5, 37.8],
         '山形県': [140.4, 38.2],
+        '山形': [140.4, 38.2],
         '岩手県': [141.2, 39.7],
+        '岩手': [141.2, 39.7],
         '青森県': [140.7, 40.8],
+        '青森': [140.7, 40.8],
         '秋田県': [140.1, 39.7],
+        '秋田': [140.1, 39.7],
         // 北海道
-        '北海道': [143.0, 43.1]
+        '北海道': [143.0, 43.1],
+        // より具体的な地域
+        '東京都23区': [139.7, 35.7],
+        '東京都多摩東部': [139.5, 35.6],
+        '東京都多摩西部': [139.3, 35.7]
     }
     
     for (const warnArea of warnAreas) {
-        if (!warnArea.Chiiki || !warnArea.Shindo1) continue
+        console.log(`WarnArea項目詳細:`, JSON.stringify(warnArea, null, 2))
         
-        const areaName = warnArea.Chiiki
-        const intensity = normalizeIntensity(warnArea.Shindo1)
+        if (!warnArea.Chiiki) {
+            console.log('⚠️ Chiikiフィールドが存在しません')
+            continue
+        }
         
-        console.log(`WarnAreaエリア: ${areaName} → 震度${intensity}`)
+        // Shindo1とShindo2の両方をチェック
+        const intensity = warnArea.Shindo1 || warnArea.Shindo2
+        if (!intensity) {
+            console.log(`⚠️ 震度データなし: ${warnArea.Chiiki}`)
+            continue
+        }
+        
+        const areaName = warnArea.Chiiki.trim()
+        const normalizedIntensity = normalizeIntensity(intensity)
+        
+        console.log(`処理中: 地域="${areaName}", 元震度="${intensity}", 正規化震度="${normalizedIntensity}"`)
         
         // 座標を取得（完全一致を優先）
         let coordinates = areaCoordinates[areaName]
@@ -238,20 +278,20 @@ function convertWarnAreaToMapAreas(warnAreas: WolfixEEWData['WarnArea']): { [key
             for (const [mapArea, coords] of Object.entries(areaCoordinates)) {
                 if (areaName.includes(mapArea) || mapArea.includes(areaName)) {
                     coordinates = coords
-                    console.log(`部分一致: ${areaName} ≈ ${mapArea}`)
+                    console.log(`部分一致発見: "${areaName}" ≈ "${mapArea}"`)
                     break
                 }
             }
         }
         
         if (coordinates) {
-            if (!areas[intensity]) {
-                areas[intensity] = []
+            if (!areas[normalizedIntensity]) {
+                areas[normalizedIntensity] = []
             }
-            areas[intensity].push(coordinates)
-            console.log(`✅ エリア追加: ${areaName} [${coordinates[0]}, ${coordinates[1]}] 震度${intensity}`)
+            areas[normalizedIntensity].push(coordinates)
+            console.log(`✅ エリア追加成功: ${areaName} [${coordinates[0]}, ${coordinates[1]}] 震度${normalizedIntensity}`)
         } else {
-            console.log(`⚠️ 座標不明: ${areaName}`)
+            console.log(`❌ 座標マッピング失敗: "${areaName}" (座標データベースに未登録)`)
         }
     }
     
@@ -259,6 +299,9 @@ function convertWarnAreaToMapAreas(warnAreas: WolfixEEWData['WarnArea']): { [key
     Object.entries(areas).forEach(([intensity, coords]) => {
         console.log(`震度${intensity}: ${coords.length}箇所`)
     })
+    
+    // デバッグ: 結果の詳細を出力
+    console.log('最終areas構造:', JSON.stringify(areas, null, 2))
     
     return areas
 }
@@ -303,7 +346,7 @@ function createMapDataFromWolfixData(wolfixData: WolfixEEWData): { earthquakeDat
 /**
  * 地震情報のDiscord埋め込みを作成
  */
-async function createEarthquakeEmbed(wolfixData: WolfixEEWData, isEEW: boolean = false): Promise<{ embed: EmbedBuilder, files?: AttachmentBuilder[] }> {
+export async function createEarthquakeEmbed(wolfixData: WolfixEEWData, isEEW: boolean = false): Promise<{ embed: EmbedBuilder, files?: AttachmentBuilder[] }> {
     console.log('=== 埋め込み作成開始 ===')
     
     const embed = new EmbedBuilder()
@@ -332,9 +375,30 @@ async function createEarthquakeEmbed(wolfixData: WolfixEEWData, isEEW: boolean =
         description += `**震源の深さ**: ${wolfixData.Depth}km\n`
     }
     
-    if (wolfixData.MaxIntensity && wolfixData.MaxIntensity !== '不明') {
+    if (wolfixData.MaxIntensity && wolfixData.MaxIntensity !== '不明' && wolfixData.MaxIntensity !== '') {
         const intensity = normalizeIntensity(wolfixData.MaxIntensity)
         description += `**最大震度**: ${intensity}\n`
+        console.log(`最大震度表示: 元データ="${wolfixData.MaxIntensity}" → 正規化後="${intensity}"`)
+    } else {
+        console.log(`最大震度表示スキップ: MaxIntensity="${wolfixData.MaxIntensity}"`)
+        // WarnAreaから最大震度を推定する
+        if (wolfixData.WarnArea && wolfixData.WarnArea.length > 0) {
+            const intensities = wolfixData.WarnArea
+                .map(area => area.Shindo1 || area.Shindo2)
+                .filter(shindo => shindo && shindo !== '不明')
+                .map(shindo => normalizeIntensity(shindo))
+            
+            if (intensities.length > 0) {
+                // 最大震度を推定
+                const maxEstimated = intensities.reduce((max, current) => {
+                    const numMax = parseFloat(max.replace(/[-+弱強]/, ''))
+                    const numCurrent = parseFloat(current.replace(/[-+弱強]/, ''))
+                    return numCurrent > numMax ? current : max
+                })
+                description += `**最大震度**: ${maxEstimated} (推定)\n`
+                console.log(`最大震度をWarnAreaから推定: ${maxEstimated}`)
+            }
+        }
     }
     
     // WarnAreaからの詳細震度情報を追加
@@ -377,10 +441,35 @@ async function createEarthquakeEmbed(wolfixData: WolfixEEWData, isEEW: boolean =
     embed.setDescription(description)
     
     // 震度画像の設定
-    if (wolfixData.MaxIntensity && wolfixData.MaxIntensity !== '不明') {
+    let thumbnailSet = false
+    if (wolfixData.MaxIntensity && wolfixData.MaxIntensity !== '不明' && wolfixData.MaxIntensity !== '') {
         const imageUrl = getIntensityImageUrl(wolfixData.MaxIntensity)
         if (imageUrl) {
             embed.setThumbnail(imageUrl)
+            thumbnailSet = true
+            console.log(`サムネイル設定: 震度${normalizeIntensity(wolfixData.MaxIntensity)} → ${imageUrl}`)
+        }
+    }
+    
+    // MaxIntensityがない場合、WarnAreaから最大震度を取得してサムネイルを設定
+    if (!thumbnailSet && wolfixData.WarnArea && wolfixData.WarnArea.length > 0) {
+        const intensities = wolfixData.WarnArea
+            .map(area => area.Shindo1 || area.Shindo2)
+            .filter(shindo => shindo && shindo !== '不明')
+            .map(shindo => normalizeIntensity(shindo))
+        
+        if (intensities.length > 0) {
+            const maxEstimated = intensities.reduce((max, current) => {
+                const numMax = parseFloat(max.replace(/[-+弱強]/, ''))
+                const numCurrent = parseFloat(current.replace(/[-+弱強]/, ''))
+                return numCurrent > numMax ? current : max
+            })
+            
+            const imageUrl = getIntensityImageUrl(maxEstimated)
+            if (imageUrl) {
+                embed.setThumbnail(imageUrl)
+                console.log(`サムネイル設定（WarnAreaから推定）: 震度${maxEstimated} → ${imageUrl}`)
+            }
         }
     }
     
