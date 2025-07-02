@@ -132,7 +132,7 @@ function getMaxIntensity(detailData: Record<string, unknown>): string {
     
     for (const path of intensityPaths) {
         const intensity = safeGet(detailData, path)
-        console.log(`最大震度取得試行: パス=${path}, 結果=${intensity}`)
+        console.log(`最大震度取得試行: パス=${path}, 値=${intensity}`)
         if (intensity !== '不明' && intensity !== '' && intensity !== 'null') {
             console.log(`最大震度取得成功: パス=${path}, 値=${intensity}`)
             return intensity
@@ -1020,7 +1020,7 @@ async function createEarthquakeEmbedFromData(detailData: Record<string, unknown>
                                process.env.VERCEL ||
                                !process.env.HOME?.includes('Users') // Windows以外の環境
     
-    // サーバー環境では地震マップ生成をスキップするオプション
+    // サーバー環境では地震マップ生成をスキップするオプ
     const skipMapGeneration = process.env.SKIP_MAP_GENERATION === 'true' || 
                               (isServerEnvironment && process.env.FORCE_MAP_GENERATION !== 'true')
     
@@ -1320,7 +1320,9 @@ export function convertWolfixToJMAFormat(wolfixData: WolfixEEWData): Record<stri
             },
             Intensity: {
                 Observation: {
-                    MaxInt: maxIntensity
+                    MaxInt: maxIntensity,
+                    // Wolfix APIのWarnArea情報を震度観測データに変換
+                    Pref: convertWolfixWarnAreaToPref(wolfixData.WarnArea || [])
                 }
             }
         }
@@ -1517,6 +1519,188 @@ export function getServerEnvironmentInfo(): Record<string, unknown> {
         // Canvas関連（動的チェック）
         canvasAvailable: 'unknown' // 実行時にチェックされます
     }
+}
+
+// Wolfix WarnAreaデータをJMA互換の都道府県形式に変換
+function convertWolfixWarnAreaToPref(warnAreas: Array<unknown>): Array<Record<string, unknown>> {
+    console.log('=== WarnArea変換開始 ===')
+    console.log('WarnArea入力:', JSON.stringify(warnAreas, null, 2))
+    
+    if (!Array.isArray(warnAreas) || warnAreas.length === 0) {
+        console.log('WarnAreaデータが空または無効')
+        return []
+    }
+    
+    const prefectures: Array<Record<string, unknown>> = []
+    
+    // 地域名から都道府県名への変換マップ
+    const areaToPrefecture: Record<string, string> = {
+        // 鹿児島県
+        '鹿児島県十島村': '鹿児島県',
+        '鹿児島県': '鹿児島県',
+        '奄美大島': '鹿児島県',
+        '種子島': '鹿児島県',
+        '屋久島': '鹿児島県',
+        // 沖縄県
+        '沖縄県': '沖縄県',
+        '沖縄本島': '沖縄県',
+        '石垣島': '沖縄県',
+        '宮古島': '沖縄県',
+        // 九州
+        '福岡県': '福岡県',
+        '佐賀県': '佐賀県',
+        '長崎県': '長崎県',
+        '熊本県': '熊本県',
+        '大分県': '大分県',
+        '宮崎県': '宮崎県',
+        // 四国
+        '愛媛県': '愛媛県',
+        '高知県': '高知県',
+        '徳島県': '徳島県',
+        '香川県': '香川県',
+        // 中国
+        '広島県': '広島県',
+        '岡山県': '岡山県',
+        '山口県': '山口県',
+        '鳥取県': '鳥取県',
+        '島根県': '島根県',
+        // 関西
+        '大阪府': '大阪府',
+        '京都府': '京都府',
+        '兵庫県': '兵庫県',
+        '奈良県': '奈良県',
+        '和歌山県': '和歌山県',
+        '滋賀県': '滋賀県',
+        '三重県': '三重県',
+        // 中部
+        '愛知県': '愛知県',
+        '岐阜県': '岐阜県',
+        '静岡県': '静岡県',
+        '長野県': '長野県',
+        '山梨県': '山梨県',
+        '新潟県': '新潟県',
+        '富山県': '富山県',
+        '石川県': '石川県',
+        '福井県': '福井県',
+        // 関東
+        '東京都': '東京都',
+        '神奈川県': '神奈川県',
+        '千葉県': '千葉県',
+        '埼玉県': '埼玉県',
+        '茨城県': '茨城県',
+        '栃木県': '栃木県',
+        '群馬県': '群馬県',
+        // 東北
+        '宮城県': '宮城県',
+        '福島県': '福島県',
+        '山形県': '山形県',
+        '岩手県': '岩手県',
+        '青森県': '青森県',
+        '秋田県': '秋田県',
+        // 北海道
+        '北海道': '北海道'
+    }
+    
+    // 都道府県別の最大震度を集計
+    const prefectureIntensities: Record<string, { maxIntensity: string, areas: Array<Record<string, unknown>> }> = {}
+    
+    for (const warnArea of warnAreas) {
+        if (typeof warnArea !== 'object' || !warnArea) continue
+        
+        const area = warnArea as Record<string, unknown>
+        const chiiki = area.Chiiki as string
+        const shindo1 = area.Shindo1 as string
+        const shindo2 = area.Shindo2 as string
+        const time = area.Time as string
+        const arrive = area.Arrive as string
+        
+        if (!chiiki || !shindo1) {
+            console.log('WarnAreaの必須フィールドが不足:', area)
+            continue
+        }
+        
+        // 地域名から都道府県を特定
+        let prefecture = areaToPrefecture[chiiki]
+        
+        // 完全一致しない場合は部分一致で検索
+        if (!prefecture) {
+            for (const [areaKey, prefKey] of Object.entries(areaToPrefecture)) {
+                if (chiiki.includes(areaKey) || areaKey.includes(chiiki)) {
+                    prefecture = prefKey
+                    break
+                }
+            }
+        }
+        
+        // それでも見つからない場合は地域名をそのまま使用
+        if (!prefecture) {
+            prefecture = chiiki
+            console.log(`都道府県が特定できない地域: ${chiiki}`)
+        }
+        
+        console.log(`地域 "${chiiki}" → 都道府県 "${prefecture}", 震度 "${shindo1}"`)
+        
+        // 震度の数値化（比較用）
+        const getIntensityValue = (intensity: string): number => {
+            const mapping: Record<string, number> = {
+                '1': 1, '2': 2, '3': 3, '4': 4, '5弱': 5, '5強': 6, '6弱': 7, '6強': 8, '7': 9
+            }
+            return mapping[intensity] || 0
+        }
+        
+        // 都道府県別に集計
+        if (!prefectureIntensities[prefecture]) {
+            prefectureIntensities[prefecture] = {
+                maxIntensity: shindo1,
+                areas: []
+            }
+        } else {
+            // より大きい震度があれば更新
+            if (getIntensityValue(shindo1) > getIntensityValue(prefectureIntensities[prefecture].maxIntensity)) {
+                prefectureIntensities[prefecture].maxIntensity = shindo1
+            }
+        }
+        
+        // エリア情報を追加
+        prefectureIntensities[prefecture].areas.push({
+            Name: chiiki,
+            MaxInt: shindo1,
+            SecondaryInt: shindo2 !== '不明' ? shindo2 : undefined,
+            ArrivalTime: time !== '//////' ? time : undefined,
+            ArrivalStatus: arrive
+        })
+    }
+    
+    // JMA互換形式に変換
+    for (const [prefName, data] of Object.entries(prefectureIntensities)) {
+        prefectures.push({
+            Name: prefName,
+            Code: getPrefectureCode(prefName),
+            MaxInt: data.maxIntensity,
+            Areas: data.areas
+        })
+    }
+    
+    console.log('変換結果:', JSON.stringify(prefectures, null, 2))
+    console.log('=== WarnArea変換完了 ===')
+    return prefectures
+}
+
+// 都道府県コードを取得（簡易版）
+function getPrefectureCode(prefName: string): string {
+    const codes: Record<string, string> = {
+        '北海道': '01', '青森県': '02', '岩手県': '03', '宮城県': '04', '秋田県': '05',
+        '山形県': '06', '福島県': '07', '茨城県': '08', '栃木県': '09', '群馬県': '10',
+        '埼玉県': '11', '千葉県': '12', '東京都': '13', '神奈川県': '14', '新潟県': '15',
+        '富山県': '16', '石川県': '17', '福井県': '18', '山梨県': '19', '長野県': '20',
+        '岐阜県': '21', '静岡県': '22', '愛知県': '23', '三重県': '24', '滋賀県': '25',
+        '京都府': '26', '大阪府': '27', '兵庫県': '28', '奈良県': '29', '和歌山県': '30',
+        '鳥取県': '31', '島根県': '32', '岡山県': '33', '広島県': '34', '山口県': '35',
+        '徳島県': '36', '香川県': '37', '愛媛県': '38', '高知県': '39', '福岡県': '40',
+        '佐賀県': '41', '長崎県': '42', '熊本県': '43', '大分県': '44', '宮崎県': '45',
+        '鹿児島県': '46', '沖縄県': '47'
+    }
+    return codes[prefName] || '99'
 }
 
 // P2P地震情報のエリア名から座標を推定する関数

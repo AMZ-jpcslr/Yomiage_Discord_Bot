@@ -762,7 +762,8 @@ export function extractEarthquakeMapData(detail: EarthquakeDetail): { earthquake
     // 震度観測点データの抽出
     const areas: { [key: string]: [number, number][] } = {}
     
-    // 気象庁XMLから震度データを抽出
+    // Wolfix WarnAreaデータを優先して使用
+    console.log('=== 震度エリアデータ抽出開始 ===')
     const intensityData = detail.Body?.Intensity?.Observation
     console.log('震度観測データのPrefフィールド:', intensityData?.Pref ? 'あり' : 'なし')
     
@@ -772,9 +773,37 @@ export function extractEarthquakeMapData(detail: EarthquakeDetail): { earthquake
         
         for (const pref of prefectures) {
             console.log(`処理中の都道府県: ${pref.Name}`)
+            
+            // Wolfix WarnArea由来のエリア情報を処理
+            if (pref.Areas && Array.isArray(pref.Areas)) {
+                console.log(`  Wolfix WarnAreaエリア数: ${pref.Areas.length}`)
+                
+                for (const warnArea of pref.Areas) {
+                    const areaName = warnArea.Name as string
+                    const intensity = warnArea.MaxInt as string
+                    
+                    console.log(`  WarnAreaエリア: ${areaName}, 震度: ${intensity}`)
+                    
+                    // エリア名から代表座標を取得
+                    const coords = getWarnAreaCoordinates(areaName)
+                    if (coords && intensity) {
+                        // 震度を earthquake-alert/map-draw 形式に変換
+                        const intensityKey = convertIntensityFormat(intensity)
+                        if (!areas[intensityKey]) {
+                            areas[intensityKey] = []
+                        }
+                        areas[intensityKey].push(coords)
+                        console.log(`    → WarnArea座標追加: [${coords[0]}, ${coords[1]}] 震度: ${intensityKey}`)
+                    } else {
+                        console.log(`    → WarnArea座標取得失敗: ${areaName}`)
+                    }
+                }
+            }
+            
+            // JMA従来のXMLデータも処理（互換性のため）
             if (pref.Area) {
                 const areas_in_pref = Array.isArray(pref.Area) ? pref.Area : [pref.Area]
-                console.log(`  地域数: ${areas_in_pref.length}`)
+                console.log(`  従来形式地域数: ${areas_in_pref.length}`)
                 
                 for (const area of areas_in_pref) {
                     console.log(`  処理中の地域: ${area.Name}`)
@@ -818,7 +847,7 @@ export function extractEarthquakeMapData(detail: EarthquakeDetail): { earthquake
                                             areas[intensityKey] = []
                                         }
                                         areas[intensityKey].push(coords)
-                                        console.log(`      → 座標追加: [${coords[0]}, ${coords[1]}] 震度キー: ${intensityKey}`)
+                                        console.log(`      → 従来形式座標追加: [${coords[0]}, ${coords[1]}] 震度キー: ${intensityKey}`)
                                     } else {
                                         console.log(`      → 座標取得失敗またはデータ不完全`)
                                     }
@@ -832,7 +861,7 @@ export function extractEarthquakeMapData(detail: EarthquakeDetail): { earthquake
                     }
                 }
             } else {
-                console.log(`  地域データなし`)
+                console.log(`  従来形式地域データなし`)
             }
         }
     } else {
@@ -1089,3 +1118,107 @@ function estimateCoordinates(prefName: string, cityName: string, stationName?: s
     
     return null
 }
+
+// Wolfix WarnAreaエリア名から代表座標を取得
+function getWarnAreaCoordinates(areaName: string): [number, number] | null {
+    console.log(`WarnAreaエリア座標検索: ${areaName}`)
+    
+    // エリア名から座標への変換マップ（経度、緯度の順）
+    const areaCoordinatesMap: Record<string, [number, number]> = {
+        // 鹿児島県
+        '鹿児島県十島村': [129.9, 29.2],
+        '鹿児島県': [130.6, 31.6],
+        '奄美大島': [130.0, 28.5],
+        '種子島': [131.0, 30.5],
+        '種子島近海': [131.0, 30.5],
+        '屋久島': [130.5, 30.3],
+        // 沖縄県
+        '沖縄県': [127.7, 26.2],
+        '沖縄本島': [127.7, 26.2],
+        '石垣島': [124.2, 24.3],
+        '宮古島': [125.3, 24.8],
+        // 九州
+        '福岡県': [130.4, 33.6],
+        '佐賀県': [130.3, 33.2],
+        '長崎県': [129.9, 32.8],
+        '熊本県': [130.7, 32.8],
+        '大分県': [131.6, 33.2],
+        '宮崎県': [131.4, 32.0],
+        // 四国
+        '愛媛県': [132.8, 33.8],
+        '高知県': [133.5, 33.6],
+        '徳島県': [134.6, 34.1],
+        '香川県': [134.0, 34.3],
+        // 中国
+        '広島県': [132.5, 34.4],
+        '岡山県': [133.9, 34.7],
+        '山口県': [131.5, 34.2],
+        '鳥取県': [134.2, 35.5],
+        '島根県': [132.6, 35.5],
+        // 関西
+        '大阪府': [135.5, 34.7],
+        '京都府': [135.8, 35.0],
+        '兵庫県': [135.2, 34.7],
+        '奈良県': [135.8, 34.7],
+        '和歌山県': [135.2, 34.2],
+        '滋賀県': [136.0, 35.0],
+        '三重県': [136.5, 34.7],
+        // 中部
+        '愛知県': [137.0, 35.2],
+        '岐阜県': [137.2, 35.4],
+        '静岡県': [138.4, 34.9],
+        '長野県': [138.2, 36.2],
+        '山梨県': [138.6, 35.7],
+        '新潟県': [139.0, 37.9],
+        '富山県': [137.2, 36.7],
+        '石川県': [136.6, 36.6],
+        '福井県': [136.2, 36.1],
+        // 関東
+        '東京都': [139.7, 35.7],
+        '神奈川県': [139.6, 35.4],
+        '千葉県': [140.1, 35.6],
+        '埼玉県': [139.6, 36.0],
+        '茨城県': [140.4, 36.3],
+        '栃木県': [139.9, 36.6],
+        '群馬県': [139.0, 36.4],
+        // 東北
+        '宮城県': [140.9, 38.3],
+        '福島県': [140.5, 37.8],
+        '山形県': [140.4, 38.2],
+        '岩手県': [141.2, 39.7],
+        '青森県': [140.7, 40.8],
+        '秋田県': [140.1, 39.7],
+        // 北海道
+        '北海道': [143.0, 43.1],
+        // 特定地域
+        'トカラ列島': [129.9, 29.2],
+        'トカラ列島近海': [129.9, 29.2],
+        '奄美大島近海': [130.0, 28.5],
+        '大隅半島東方沖': [131.5, 31.0],
+        '薩摩半島西方沖': [129.5, 31.5],
+        '日向灘': [132.0, 32.0],
+        '豊後水道': [132.3, 33.2],
+        '伊予灘': [132.0, 33.7],
+        '安芸灘': [132.5, 34.2],
+        '周防灘': [131.0, 33.8]
+    }
+    
+    // 完全一致を優先
+    if (areaCoordinatesMap[areaName]) {
+        console.log(`完全一致で座標取得: ${areaName} → [${areaCoordinatesMap[areaName][0]}, ${areaCoordinatesMap[areaName][1]}]`)
+        return areaCoordinatesMap[areaName]
+    }
+    
+    // 部分一致で検索
+    for (const [mapArea, coords] of Object.entries(areaCoordinatesMap)) {
+        if (areaName.includes(mapArea) || mapArea.includes(areaName)) {
+            console.log(`部分一致で座標取得: ${areaName} ≈ ${mapArea} → [${coords[0]}, ${coords[1]}]`)
+            return coords
+        }
+    }
+    
+    console.log(`座標が見つからないエリア: ${areaName}`)
+    return null
+}
+
+// earthquake-alert/map-draw compatible interface
