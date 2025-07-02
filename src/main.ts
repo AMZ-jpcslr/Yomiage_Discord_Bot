@@ -30,6 +30,41 @@ const client = new Client({
     ],
 })
 
+// ステータスメッセージのバリエーション
+const statusMessages = [
+    'キヴォトスの最新情報を配信中',
+    '緊急地震速報を監視中',
+    'ブルーアーカイブ情報をお届け',
+    '地震情報をリアルタイム配信',
+    'キヴォトスからの最新ニュース',
+    'Wolfix EEW API監視中',
+    'P2P地震情報を受信中',
+    'プレフェクトの安全を守護中'
+]
+
+// 時間帯別メッセージ
+const timeBasedMessages = {
+    morning: ['おはようございます！今日も安全をお守りします', 'モーニングレポート配信中'],
+    afternoon: ['午後もキヴォトス情報をお届け', '昼間の地震監視継続中'],
+    evening: ['夕方の情報チェック中', 'イブニングニュース配信'],
+    night: ['夜間も24時間監視中', 'ナイトモード稼働中']
+}
+
+let currentMessageIndex = 0
+
+function getTimeBasedMessage(): string {
+    const hour = new Date().getHours()
+    if (hour >= 6 && hour < 12) {
+        return timeBasedMessages.morning[Math.floor(Math.random() * timeBasedMessages.morning.length)]
+    } else if (hour >= 12 && hour < 18) {
+        return timeBasedMessages.afternoon[Math.floor(Math.random() * timeBasedMessages.afternoon.length)]
+    } else if (hour >= 18 && hour < 22) {
+        return timeBasedMessages.evening[Math.floor(Math.random() * timeBasedMessages.evening.length)]
+    } else {
+        return timeBasedMessages.night[Math.floor(Math.random() * timeBasedMessages.night.length)]
+    }
+}
+
 function setBotPresence() {
     if (client.user) {
         const ping = client.ws.ping
@@ -37,14 +72,25 @@ function setBotPresence() {
         const cpuUsage = process.cpuUsage()
         const cpuPercent = Math.round((cpuUsage.user + cpuUsage.system) / 1000000) // CPU使用率の近似値
         
+        // 30%の確率で時間帯別メッセージを使用、それ以外は通常メッセージをローテーション
+        let baseMessage: string
+        if (Math.random() < 0.3) {
+            baseMessage = getTimeBasedMessage()
+        } else {
+            baseMessage = statusMessages[currentMessageIndex]
+            currentMessageIndex = (currentMessageIndex + 1) % statusMessages.length
+        }
+        
         const statusText = isOnline 
-            ? `稼働中 | Ping: ${ping}ms | CPU: ${cpuPercent}% | キヴォトスの最新情報を配信中`
-            : 'オフライン | キヴォトスの最新情報を配信中'
+            ? `稼働中 | Ping: ${ping}ms | CPU: ${cpuPercent}% | ${baseMessage}`
+            : `オフライン | ${baseMessage}`
         
         client.user.setPresence({
             activities: [{ name: statusText, type: 1 }],
             status: isOnline ? 'online' : 'dnd',
         })
+        
+        console.log(`🔄 ステータス更新: ${statusText}`)
     }
 }
 
@@ -71,15 +117,12 @@ client.once('ready', () => {
 
     // 10秒ごとにBotステータスを更新し、ターミナルにも出力
     setInterval(() => {
-        setBotPresence() // ステータス更新
-        
-        const ping = client.ws.ping
         const guildCount = client.guilds.cache.size
-        const isOnline = client.isReady()
-        const cpuUsage = process.cpuUsage()
-        const cpuPercent = Math.round((cpuUsage.user + cpuUsage.system) / 1000000)
         
-        console.log(`🤖 Bot状態: ${isOnline ? '稼働中' : 'オフライン'} | Ping: ${ping}ms | CPU: ${cpuPercent}% | サーバー数: ${guildCount} | キヴォトスの最新情報を配信中`)
+        setBotPresence() // ステータス更新（ログも出力される）
+        
+        // 詳細情報をターミナルに出力
+        console.log(`📊 詳細情報: サーバー数: ${guildCount} | メモリ使用量: ${Math.round(process.memoryUsage().heapUsed / 1024 / 1024)}MB`)
     }, 10 * 1000) // 10秒ごと
 
     startEqAutoNotify(client)
