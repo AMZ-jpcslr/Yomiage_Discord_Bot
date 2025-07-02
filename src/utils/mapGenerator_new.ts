@@ -187,32 +187,40 @@ export async function generateEarthquakeMap(earthquakeData: EarthquakeData, area
             // 緊急地震速報の場合は縮尺を小さくして広域を表示
             console.log('P2P地震情報のため広域表示に調整')
             if (expansion_rate === 0) {
-                _scale = 3  // 単一震源でも広域表示
+                _scale = 1.5  // 単一震源でも広域表示（縮尺を更に小さく）
             } else if (expansion_rate < 3) {
-                _scale = 2  // より広域
+                _scale = 1.0  // より広域
             } else if (expansion_rate < 7) {
-                _scale = 1.5
+                _scale = 0.8
             } else {
-                _scale = 1
+                _scale = 0.6
             }
         } else {
-            // 通常の地震情報の場合
+            // 通常の地震情報の場合も縮尺を小さく調整
             if (expansion_rate === 0) {
-                _scale = 8  // 単一震源の場合はさらにズームイン
+                _scale = 4  // 単一震源の場合（従来の8から4に縮小）
             } else if (expansion_rate < 1) {
-                _scale = 6  // 小さな範囲の場合はより拡大
+                _scale = 3  // 小さな範囲の場合（従来の6から3に縮小）
             } else if (expansion_rate < 3) {
-                _scale = 3
+                _scale = 2  // 従来の3から2に縮小
             } else if (expansion_rate < 5) {
-                _scale = 2
+                _scale = 1.5  // 従来の2から1.5に縮小
             } else if (expansion_rate < 7) {
-                _scale = 1.5
+                _scale = 1.0  // 従来の1.5から1.0に縮小
             } else if (expansion_rate < 9) {
-                _scale = 1.2
+                _scale = 0.8  // 従来の1.2から0.8に縮小
             } else {
-                _scale = 1
+                _scale = 0.6  // 従来の1から0.6に縮小
             }
         }
+        
+        console.log(`=== 縮尺計算結果 ===`)
+        console.log(`expansion_rate: ${expansion_rate}`)
+        console.log(`isP2PData: ${isP2PData}`)
+        console.log(`動的スケール係数: ${_scale}`)
+        console.log(`基本スケール: ${def_scale}`)
+        console.log(`最終スケール: ${def_scale * _scale}`)
+        console.log(`→ より広域表示のため縮尺を調整しました`)
         
         // Simplify geojson data with higher resolution for better map accuracy
         // 新しいprefectures.geojsonファイル用の最適化された解像度設定
