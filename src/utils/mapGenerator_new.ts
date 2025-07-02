@@ -288,28 +288,17 @@ export async function generateEarthquakeMap(earthquakeData: EarthquakeData, area
             .style('stroke', stroke_color)
             .style('shape-rendering', 'geometricPrecision') // より精密な描画
         
-        // Seismic intensity plotting function (improved visualization)
+        // Seismic intensity plotting function (simplified and reliable)
         const Export = (area: [number, number], color: string, text: string) => {
             const coordinate = aProjection(area)
             if (!coordinate) return
             
-            // 震度に応じてサイズを調整
-            const baseRadius = seismic_intensity_config.circle
-            const intensityValue = parseFloat(text.replace(/[-+]/, ''))
-            const radiusMultiplier = Math.max(0.8, 1 + (intensityValue - 3) * 0.1) // 震度3を基準にサイズ調整
-            const circleRadius = baseRadius * radiusMultiplier
+            console.log(`震度表示: 座標[${coordinate[0]}, ${coordinate[1]}], 色:${color}, 文字:${text}`)
             
-            // Draw outer stroke circle for better visibility
-            svg.append('circle')
-                .attr('r', circleRadius + 2)
-                .attr('cx', coordinate[0])
-                .attr('cy', coordinate[1])
-                .style('fill', '#ffffff')
-                .style('stroke', '#000000')
-                .style('stroke-width', '3')
-                .style('filter', 'drop-shadow(2px 2px 4px rgba(0,0,0,0.6))')
+            // 基本的な円サイズ
+            const circleRadius = seismic_intensity_config.circle
             
-            // Draw main intensity circle with proper color
+            // Draw main intensity circle
             svg.append('circle')
                 .attr('r', circleRadius)
                 .attr('cx', coordinate[0])
@@ -317,18 +306,23 @@ export async function generateEarthquakeMap(earthquakeData: EarthquakeData, area
                 .style('fill', color)
                 .style('stroke', '#000000')
                 .style('stroke-width', '2')
+                .style('filter', 'drop-shadow(1px 1px 3px rgba(0,0,0,0.6))')
             
-            // Draw intensity text with high contrast
+            // シンプルで確実なテキスト描画
             svg.append('text')
                 .text(text)
                 .attr('x', coordinate[0])
-                .attr('y', coordinate[1] + 6) // テキストを円の中央に配置
-                .attr('font-size', Math.max(16, seismic_intensity_config.fontsize))
+                .attr('y', coordinate[1] + 5) // 少し下に調整
+                .attr('font-size', '16')
                 .attr('text-anchor', 'middle')
-                .attr('font-family', seismic_intensity_config.font)
-                .style('fill', intensityValue >= 5 ? '#ffffff' : '#000000') // 震度5以上は白文字
+                .attr('font-family', 'Arial Black, Arial, sans-serif')
+                .style('fill', '#000000') // まず黒で試す
                 .style('font-weight', 'bold')
-                .style('text-shadow', intensityValue >= 5 ? '1px 1px 2px rgba(0,0,0,0.8)' : '1px 1px 2px rgba(255,255,255,0.8)')
+                .style('stroke', '#ffffff') // 白い縁取り
+                .style('stroke-width', '1')
+                .style('paint-order', 'stroke fill') // 縁取りを先に描画
+            
+            console.log(`震度${text}を座標[${coordinate[0]}, ${coordinate[1]}]に描画完了`)
         }
         
         // Plot seismic intensity areas first (so epicenter appears on top)
