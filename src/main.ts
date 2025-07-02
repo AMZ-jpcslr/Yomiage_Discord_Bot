@@ -30,24 +30,24 @@ const client = new Client({
     ],
 })
 
-// ステータスメッセージのバリエーション
+// ステータスメッセージのバリエーション（短縮版）
 const statusMessages = [
-    'キヴォトスの最新情報を配信中',
-    '緊急地震速報を監視中',
-    'ブルーアーカイブ情報をお届け',
-    '地震情報をリアルタイム配信',
-    'キヴォトスからの最新ニュース',
-    'Wolfix EEW API監視中',
-    'P2P地震情報を受信中',
-    'プレフェクトの安全を守護中'
+    'キヴォトス情報配信中',
+    '緊急地震速報監視中',
+    'ブルアカ情報更新',
+    '地震情報配信中',
+    'キヴォトス最新ニュース',
+    'Wolfix EEW監視',
+    'P2P地震情報受信',
+    'プレフェクト守護中'
 ]
 
-// 時間帯別メッセージ
+// 時間帯別メッセージ（短縮版）
 const timeBasedMessages = {
-    morning: ['おはようございます！今日も安全をお守りします', 'モーニングレポート配信中'],
-    afternoon: ['午後もキヴォトス情報をお届け', '昼間の地震監視継続中'],
-    evening: ['夕方の情報チェック中', 'イブニングニュース配信'],
-    night: ['夜間も24時間監視中', 'ナイトモード稼働中']
+    morning: ['おはよう！安全をお守り中', 'モーニング配信中'],
+    afternoon: ['午後も情報配信中', '昼間監視継続'],
+    evening: ['夕方チェック中', 'イブニング配信'],
+    night: ['夜間24時間監視', 'ナイトモード稼働']
 }
 
 let currentMessageIndex = 0
@@ -66,7 +66,12 @@ function getTimeBasedMessage(): string {
 }
 
 function setBotPresence() {
-    if (client.user) {
+    if (!client.user || !client.isReady()) {
+        console.log('⚠️ ボットが準備完了していないため、ステータス更新をスキップ')
+        return
+    }
+    
+    try {
         const ping = client.ws.ping
         const isOnline = client.isReady()
         const cpuUsage = process.cpuUsage()
@@ -82,15 +87,23 @@ function setBotPresence() {
         }
         
         const statusText = isOnline 
-            ? `稼働中 | Ping: ${ping}ms | CPU: ${cpuPercent}% | ${baseMessage}`
-            : `オフライン | ${baseMessage}`
+            ? `✅ Ping:${ping}ms CPU:${cpuPercent}% | ${baseMessage}`
+            : `❌ オフライン | ${baseMessage}`
         
+        // アクティビティタイプを0（Playing）に変更して確実に表示されるようにする
         client.user.setPresence({
-            activities: [{ name: statusText, type: 1 }],
+            activities: [{ 
+                name: statusText, 
+                type: 0  // 0 = Playing, 1 = Streaming, 2 = Listening, 3 = Watching, 5 = Competing
+            }],
             status: isOnline ? 'online' : 'dnd',
         })
         
-        console.log(`🔄 ステータス更新: ${statusText}`)
+        console.log(`🔄 ステータス更新成功: ${statusText}`)
+        console.log(`📊 現在時刻: ${new Date().toLocaleTimeString()} | メッセージインデックス: ${currentMessageIndex - 1}`)
+        
+    } catch (error) {
+        console.error('❌ ステータス更新エラー:', error)
     }
 }
 
@@ -115,15 +128,29 @@ client.once('ready', () => {
         envSupport.recommendations.forEach(rec => console.log(`💡 ${rec}`))
     }
 
+    // 初回ステータス設定
+    console.log('🔄 初回ステータス設定を実行')
+    setBotPresence()
+    
     // 10秒ごとにBotステータスを更新し、ターミナルにも出力
-    setInterval(() => {
+    console.log('⏰ 10秒間隔のステータス更新タイマーを開始')
+    const statusUpdateInterval = setInterval(() => {
+        console.log('⏰ ステータス更新タイマー実行中...')
         const guildCount = client.guilds.cache.size
         
         setBotPresence() // ステータス更新（ログも出力される）
         
         // 詳細情報をターミナルに出力
         console.log(`📊 詳細情報: サーバー数: ${guildCount} | メモリ使用量: ${Math.round(process.memoryUsage().heapUsed / 1024 / 1024)}MB`)
+        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
     }, 10 * 1000) // 10秒ごと
+    
+    // プロセス終了時にタイマーをクリア
+    process.on('SIGINT', () => {
+        console.log('🛑 ボット終了処理中...')
+        clearInterval(statusUpdateInterval)
+        process.exit(0)
+    })
 
     startEqAutoNotify(client)
     
