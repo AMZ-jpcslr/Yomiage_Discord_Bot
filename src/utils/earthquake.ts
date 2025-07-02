@@ -43,7 +43,7 @@ function getShindoImageUrl(maxScale: string | number): string | undefined {
         case '1': case '10': return 'https://i.gyazo.com/4e7e465a1fadcdacb6b2d7ad77e26613/raw'
         case '2': case '20': return 'https://i.gyazo.com/32a63f749d9a95b1bd4c610ac54c3639/raw'
         case '3': case '30': return 'https://i.gyazo.com/af3a39eebdc321ae76eab731e60eb110/raw'
-        case '4': case '40': return 'https://i.gyazo.com/39351fbdd780e0db5a1b4b0dfd025/raw'
+        case '4': case '40': return 'https://gyazo.com/39351fbdd780e0db5a1b4b24b0dfd025/raw'
         case '5弱': case '5-': case '45': return 'https://i.gyazo.com/7bf28e3aff47cf4c4b8b20bcf9a33b29/raw'
         case '5強': case '5+': case '50': return 'https://i.gyazo.com/3cd7bab33cf0682e57ece10df2189988/raw'
         case '6弱': case '6-': case '55': return 'https://i.gyazo.com/77c3a1e02e8fcb0239afa5e4388146be/raw'
