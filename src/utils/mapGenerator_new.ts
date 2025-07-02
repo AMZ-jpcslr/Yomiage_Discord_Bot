@@ -559,10 +559,11 @@ interface EarthquakeDetail {
 // 震度データと地震情報を抽出する関数
 export function extractEarthquakeMapData(detail: EarthquakeDetail): { earthquakeData: EarthquakeData, areaInfo: AreaInfo } {
     console.log('=== 地震座標データ抽出開始 ===')
+    console.log('受信データ構造:', JSON.stringify(detail, null, 2))
     
-    // 座標情報の抽出（気象庁XMLフォーマットに対応）
-    let longitude = 139.69 // デフォルト（東京）
-    let latitude = 35.68   // デフォルト（東京）
+    // Wolfix APIの座標情報を抽出（推定座標は一切使用しない）
+    let longitude: number | null = null
+    let latitude: number | null = null
     
     // 複数の形式の座標情報に対応
     const hypocenterCoord = detail.Body?.Earthquake?.Hypocenter?.Area?.Coordinate
@@ -586,12 +587,12 @@ export function extractEarthquakeMapData(detail: EarthquakeDetail): { earthquake
                     if (!isNaN(newLon) && !isNaN(newLat)) {
                         longitude = newLon
                         latitude = newLat
-                        console.log(`✅ 配列形式から座標取得成功: ${longitude}, ${latitude}`)
+                        console.log(`✅ 配列形式から実座標取得成功: ${longitude}, ${latitude}`)
                     }
                 }
             }
         } else if (hypocenterCoord['#text']) {
-            // 単一オブジェクト形式の場合
+            // 単一オブジェクト形式の場合（Wolfix APIからの変換データ）
             console.log('単一オブジェクト形式の座標データを処理中')
             const coordText = hypocenterCoord['#text']
             console.log('座標テキスト:', coordText)
@@ -602,88 +603,20 @@ export function extractEarthquakeMapData(detail: EarthquakeDetail): { earthquake
                 if (!isNaN(newLon) && !isNaN(newLat)) {
                     longitude = newLon
                     latitude = newLat
-                    console.log(`✅ 単一形式から座標取得成功: ${longitude}, ${latitude}`)
+                    console.log(`✅ 単一形式から実座標取得成功: ${longitude}, ${latitude}`)
                 }
             }
         }
-    } else {
-        console.log('⚠️ 座標データが見つかりません')
     }
     
-    // 代替方法：名前から推定される緯度経度
+    // 座標が取得できない場合はエラーとする（推定は行わない）
+    if (longitude === null || latitude === null) {
+        const hypocenterName = detail.Body?.Earthquake?.Hypocenter?.Area?.Name || '不明'
+        console.error(`❌ 実座標が取得できませんでした。震源地名: ${hypocenterName}`)
+        throw new Error(`Wolfix APIから正確な座標を取得できませんでした。推定座標は使用しません。`)
+    }
+    
     const hypocenterName = detail.Body?.Earthquake?.Hypocenter?.Area?.Name || '不明'
-    console.log('震源地名:', hypocenterName)
-    
-    if (longitude === 139.69 && latitude === 35.68) {
-        // デフォルト座標の場合のみ、地名から推定
-        console.log('⚠️ 実座標が取得できないため、地名から推定します')
-        const locationMap: { [key: string]: [number, number] } = {
-            'トカラ列島': [129.9, 29.2],
-            'トカラ列島近海': [129.9, 29.2],
-            '奄美大島近海': [130.0, 28.5],
-            '種子島近海': [131.0, 30.5],
-            '屋久島': [130.5, 30.3],
-            '福島': [140.47, 37.75],
-            '宮城': [140.87, 38.27],
-            '岩手': [141.15, 39.70],
-            '茨城': [140.45, 36.34],
-            '栃木': [139.88, 36.57],
-            '群馬': [139.06, 36.39],
-            '千葉': [140.12, 35.61],
-            '埼玉': [139.65, 35.86],
-            '東京': [139.69, 35.68],
-            '神奈川': [139.64, 35.45],
-            '静岡': [138.38, 34.98],
-            '山梨': [138.57, 35.66],
-            '長野': [138.18, 36.65],
-            '新潟': [139.02, 37.90],
-            '富山': [137.21, 36.70],
-            '石川': [136.62, 36.59],
-            '福井': [136.22, 35.94],
-            '愛知': [136.91, 35.18],
-            '岐阜': [136.72, 35.39],
-            '三重': [136.51, 34.73],
-            '滋賀': [135.87, 35.00],
-            '京都': [135.75, 35.01],
-            '大阪': [135.50, 34.69],
-            '兵庫': [134.69, 34.69],
-            '奈良': [135.83, 34.69],
-            '和歌山': [135.17, 34.23],
-            '鳥取': [134.24, 35.50],
-            '島根': [132.55, 35.47],
-            '岡山': [133.93, 34.66],
-            '広島': [132.46, 34.40],
-            '山口': [131.47, 34.19],
-            '徳島': [134.56, 34.07],
-            '香川': [134.04, 34.34],
-            '愛媛': [132.77, 33.84],
-            '高知': [133.53, 33.56],
-            '福岡': [130.42, 33.61],
-            '佐賀': [130.30, 33.25],
-            '長崎': [129.87, 32.75],
-            '熊本': [130.74, 32.79],
-            '大分': [131.61, 33.24],
-            '宮崎': [131.42, 31.91],
-            '鹿児島': [130.56, 31.56],
-            '沖縄': [127.68, 26.21]
-        }
-        
-        for (const [region, coords] of Object.entries(locationMap)) {
-            if (hypocenterName.includes(region)) {
-                longitude = coords[0]
-                latitude = coords[1]
-                console.log(`✅ 地名 "${region}" から座標推定: ${longitude}, ${latitude}`)
-                break
-            }
-        }
-        
-        if (longitude === 139.69 && latitude === 35.68) {
-            console.log('⚠️ 地名からも座標を推定できませんでした。デフォルト座標を使用します')
-        }
-    } else {
-        console.log('✅ 実座標データを使用します')
-    }
-    
     console.log(`震源座標: ${latitude}°N, ${longitude}°E (${hypocenterName})`)
     
     // 震度観測点データの抽出
