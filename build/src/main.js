@@ -59,7 +59,7 @@ const shiftCommand = __importStar(require("./commands/shift"));
 const setEqChannelCommand = __importStar(require("./commands/set_eq_channel"));
 const getEqCommand = __importStar(require("./commands/get_eq")); // 新しい実装
 const dotenv_1 = __importDefault(require("dotenv"));
-const eq_notify_1 = require("./eq_notify"); // 新しい通知システム
+const eq_notify_new_1 = require("./eq_notify_new"); // 新しい通知システム
 const http = __importStar(require("http"));
 // 新しい実装をエクスポート（テスト用）
 __exportStar(require("./utils/earthquake"), exports);
@@ -198,7 +198,7 @@ client.once('ready', () => __awaiter(void 0, void 0, void 0, function* () {
     });
     // 新しい緊急地震速報監視システムを開始
     console.log('🚨 緊急地震速報監視システム開始...');
-    (0, eq_notify_1.monitorEarthquakeAlerts)(client);
+    (0, eq_notify_new_1.monitorEarthquakeAlerts)(client);
 }));
 // エラーハンドリング
 client.on('error', error => {

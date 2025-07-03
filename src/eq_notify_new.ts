@@ -98,7 +98,7 @@ function isDuplicateNotification(eventId: string, serial: number): boolean {
 export async function monitorEarthquakeAlerts(client: Client): Promise<void> {
     console.log('=== 緊急地震速報監視開始 ===')
     
-    const checkInterval = 5000  // 5秒間隔
+    const checkInterval = 2000  // 2秒間隔（リアルタイム監視）
     
     setInterval(async () => {
         try {

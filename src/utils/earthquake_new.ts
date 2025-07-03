@@ -52,6 +52,28 @@ interface WolfixEEWData {
     Pond?: string
 }
 
+// Wolfix EQList API データ型定義（地震情報用）
+interface WolfixEQListData {
+    Title?: string
+    EventID?: string
+    Hypocenter?: string
+    OriginTime?: string
+    Magnitude?: number
+    Latitude?: number
+    Longitude?: number
+    Depth?: number
+    MaxIntensity?: string
+    P2PArea?: Array<{
+        Chiiki?: string
+        Shindo?: string
+        Class?: string
+    }>
+}
+
+interface WolfixEQListResponse {
+    [key: string]: WolfixEQListData
+}
+
 // 地図生成用のデータ構造
 interface EarthquakeMapData {
     longitude: number
@@ -70,20 +92,20 @@ interface AreaInfo {
 }
 
 /**
- * Wolfix APIから最新の地震データを取得
+ * Wolfix APIから最新の地震データを取得（EEW用）
  */
 export async function fetchWolfixEarthquakeData(): Promise<WolfixEEWData | null> {
     try {
-        console.log('=== Wolfix API地震データ取得開始 ===')
+        console.log('=== Wolfix EEW API地震データ取得開始 ===')
         
         const response = await fetch('https://api.wolfx.jp/jma_eew.json')
         if (!response.ok) {
-            console.error(`Wolfix API エラー: ${response.status} ${response.statusText}`)
+            console.error(`Wolfix EEW API エラー: ${response.status} ${response.statusText}`)
             return null
         }
         
         const data = await response.json() as WolfixEEWData
-        console.log('✅ Wolfix API地震データ取得成功')
+        console.log('✅ Wolfix EEW API地震データ取得成功')
         console.log(`イベントID: ${data.EventID}`)
         console.log(`震源地: ${data.Hypocenter}`)
         console.log(`座標: ${data.Latitude}°N, ${data.Longitude}°E`)
@@ -94,7 +116,47 @@ export async function fetchWolfixEarthquakeData(): Promise<WolfixEEWData | null>
         return data
         
     } catch (error) {
-        console.error('❌ Wolfix API地震データ取得エラー:', error)
+        console.error('❌ Wolfix EEW API地震データ取得エラー:', error)
+        return null
+    }
+}
+
+/**
+ * Wolfix APIから地震情報リストを取得（通常の地震情報用）
+ */
+export async function fetchWolfixEarthquakeList(): Promise<WolfixEQListData | null> {
+    try {
+        console.log('=== Wolfix EQList API地震データ取得開始 ===')
+        
+        const response = await fetch('https://api.wolfx.jp/jma_eqlist.json')
+        if (!response.ok) {
+            console.error(`Wolfix EQList API エラー: ${response.status} ${response.statusText}`)
+            return null
+        }
+        
+        const data = await response.json() as WolfixEQListResponse
+        console.log('✅ Wolfix EQList API地震データ取得成功')
+        
+        // 最新の地震情報を取得（最初のエントリ）
+        const latestKey = Object.keys(data)[0]
+        if (!latestKey) {
+            console.log('地震情報が見つかりません')
+            return null
+        }
+        
+        const latestEarthquake = data[latestKey]
+        console.log(`最新地震情報:`)
+        console.log(`イベントID: ${latestEarthquake.EventID}`)
+        console.log(`震源地: ${latestEarthquake.Hypocenter}`)
+        console.log(`座標: ${latestEarthquake.Latitude}°N, ${latestEarthquake.Longitude}°E`)
+        console.log(`マグニチュード: ${latestEarthquake.Magnitude}`)
+        console.log(`最大震度: ${latestEarthquake.MaxIntensity}`)
+        console.log(`P2PArea数: ${latestEarthquake.P2PArea?.length || 0}`)
+        
+        return latestEarthquake
+        
+    } catch (error) {
+        console.error('❌ Wolfix EQList API地震データ取得エラー:', error)
         return null
     }
 }
@@ -264,6 +326,125 @@ function convertWarnAreaToMapAreas(warnAreas: WolfixEEWData['WarnArea']): { [key
 }
 
 /**
+ * EQList P2PAreaから地図用のエリア情報を生成
+ */
+function convertEQListToMapAreas(p2pAreas: WolfixEQListData['P2PArea']): { [key: string]: [number, number][] } {
+    const areas: { [key: string]: [number, number][] } = {}
+    
+    if (!p2pAreas || !Array.isArray(p2pAreas)) {
+        console.log('P2PAreaデータなし - 震源地のみ表示')
+        return areas
+    }
+    
+    console.log(`=== P2PArea処理開始 (${p2pAreas.length}件) ===`)
+    
+    // 地域名から座標への変換マップ（WarnAreaと共通）
+    const areaCoordinates: Record<string, [number, number]> = {
+        // 九州・沖縄
+        '鹿児島県十島村': [129.9, 29.2],
+        '鹿児島県': [130.6, 31.6],
+        'トカラ列島': [129.9, 29.2],
+        'トカラ列島近海': [129.9, 29.2],
+        '奄美大島': [130.0, 28.5],
+        '種子島': [131.0, 30.5],
+        '屋久島': [130.5, 30.3],
+        '沖縄県': [127.7, 26.2],
+        '福岡県': [130.4, 33.6],
+        '佐賀県': [130.3, 33.2],
+        '長崎県': [129.9, 32.8],
+        '熊本県': [130.7, 32.8],
+        '大分県': [131.6, 33.2],
+        '宮崎県': [131.4, 32.0],
+        // 四国
+        '愛媛県': [132.8, 33.8],
+        '高知県': [133.5, 33.6],
+        '徳島県': [134.6, 34.1],
+        '香川県': [134.0, 34.3],
+        // 中国
+        '広島県': [132.5, 34.4],
+        '岡山県': [133.9, 34.7],
+        '山口県': [131.5, 34.2],
+        '鳥取県': [134.2, 35.5],
+        '島根県': [132.6, 35.5],
+        // 関西
+        '大阪府': [135.5, 34.7],
+        '京都府': [135.8, 35.0],
+        '兵庫県': [135.2, 34.7],
+        '奈良県': [135.8, 34.7],
+        '和歌山県': [135.2, 34.2],
+        '滋賀県': [136.0, 35.0],
+        '三重県': [136.5, 34.7],
+        // 中部
+        '愛知県': [137.0, 35.2],
+        '岐阜県': [137.2, 35.4],
+        '静岡県': [138.4, 34.9],
+        '長野県': [138.2, 36.2],
+        '山梨県': [138.6, 35.7],
+        '新潟県': [139.0, 37.9],
+        '富山県': [137.2, 36.7],
+        '石川県': [136.6, 36.6],
+        '福井県': [136.2, 36.1],
+        // 関東
+        '東京都': [139.7, 35.7],
+        '神奈川県': [139.6, 35.4],
+        '千葉県': [140.1, 35.6],
+        '埼玉県': [139.6, 36.0],
+        '茨城県': [140.4, 36.3],
+        '栃木県': [139.9, 36.6],
+        '群馬県': [139.0, 36.4],
+        // 東北
+        '宮城県': [140.9, 38.3],
+        '福島県': [140.5, 37.8],
+        '山形県': [140.4, 38.2],
+        '岩手県': [141.2, 39.7],
+        '青森県': [140.7, 40.8],
+        '秋田県': [140.1, 39.7],
+        // 北海道
+        '北海道': [143.0, 43.1]
+    }
+    
+    for (const p2pArea of p2pAreas) {
+        if (!p2pArea.Chiiki || !p2pArea.Shindo) continue
+        
+        const areaName = p2pArea.Chiiki
+        const intensity = normalizeIntensity(p2pArea.Shindo)
+        
+        console.log(`P2PAreaエリア: ${areaName} → 震度${intensity}`)
+        
+        // 座標を取得（完全一致を優先）
+        let coordinates = areaCoordinates[areaName]
+        
+        // 完全一致しない場合は部分一致で検索
+        if (!coordinates) {
+            for (const [mapArea, coords] of Object.entries(areaCoordinates)) {
+                if (areaName.includes(mapArea) || mapArea.includes(areaName)) {
+                    coordinates = coords
+                    console.log(`部分一致: ${areaName} ≈ ${mapArea}`)
+                    break
+                }
+            }
+        }
+        
+        if (coordinates) {
+            if (!areas[intensity]) {
+                areas[intensity] = []
+            }
+            areas[intensity].push(coordinates)
+            console.log(`✅ エリア追加: ${areaName} [${coordinates[0]}, ${coordinates[1]}] 震度${intensity}`)
+        } else {
+            console.log(`⚠️ 座標不明: ${areaName}`)
+        }
+    }
+    
+    console.log('=== P2PArea処理完了 ===')
+    Object.entries(areas).forEach(([intensity, coords]) => {
+        console.log(`震度${intensity}: ${coords.length}箇所`)
+    })
+    
+    return areas
+}
+
+/**
  * Wolfix地震データから地図生成用データを作成
  */
 function createMapDataFromWolfixData(wolfixData: WolfixEEWData): { earthquakeData: EarthquakeMapData, areaInfo: AreaInfo } {
@@ -294,6 +475,43 @@ function createMapDataFromWolfixData(wolfixData: WolfixEEWData): { earthquakeDat
     }
     
     console.log('=== 地図データ作成完了 ===')
+    console.log(`震源: [${areaInfo.epicenter[0]}, ${areaInfo.epicenter[1]}]`)
+    console.log(`エリア種類数: ${Object.keys(areas).length}`)
+    
+    return { earthquakeData, areaInfo }
+}
+
+/**
+ * EQList地震データから地図生成用データを作成
+ */
+function createMapDataFromEQListData(eqListData: WolfixEQListData): { earthquakeData: EarthquakeMapData, areaInfo: AreaInfo } {
+    console.log('=== EQList地図データ作成開始 ===')
+    
+    // 震源地座標（必須）
+    const longitude = eqListData.Longitude || 139.69  // デフォルト: 東京
+    const latitude = eqListData.Latitude || 35.68
+    
+    console.log(`震源地座標: ${latitude}°N, ${longitude}°E`)
+    console.log(`震源地名: ${eqListData.Hypocenter || '不明'}`)
+    
+    // 地震基本データ
+    const earthquakeData: EarthquakeMapData = {
+        longitude: longitude,
+        latitude: latitude,
+        magnitude: eqListData.Magnitude || '不明',
+        depth: eqListData.Depth ? `${eqListData.Depth}km` : '不明',
+        hypocenter: eqListData.Hypocenter || '不明',
+        maxScale: normalizeIntensity(eqListData.MaxIntensity)
+    }
+    
+    // エリア情報
+    const areas = convertEQListToMapAreas(eqListData.P2PArea)
+    const areaInfo: AreaInfo = {
+        epicenter: [longitude, latitude],  // 経度, 緯度の順序
+        areas: areas
+    }
+    
+    console.log('=== EQList地図データ作成完了 ===')
     console.log(`震源: [${areaInfo.epicenter[0]}, ${areaInfo.epicenter[1]}]`)
     console.log(`エリア種類数: ${Object.keys(areas).length}`)
     
@@ -429,6 +647,144 @@ async function createEarthquakeEmbed(wolfixData: WolfixEEWData, isEEW: boolean =
 }
 
 /**
+ * EQList地震情報のDiscord埋め込みを作成
+ */
+async function createEarthquakeEmbedFromEQList(eqListData: WolfixEQListData): Promise<{ embed: EmbedBuilder, files?: AttachmentBuilder[] }> {
+    console.log('=== EQList埋め込み作成開始 ===')
+    
+    const embed = new EmbedBuilder()
+    
+    // タイトルと色の設定
+    embed.setTitle('📊 最新地震情報')
+    embed.setColor(0x0099FF)  // 青色
+    
+    // 基本情報の構築
+    let description = ''
+    
+    if (eqListData.Hypocenter) {
+        description += `**震源地**: ${eqListData.Hypocenter}\n`
+    }
+    
+    if (eqListData.Magnitude) {
+        description += `**マグニチュード**: M${eqListData.Magnitude}\n`
+    }
+    
+    if (eqListData.Depth) {
+        description += `**震源の深さ**: ${eqListData.Depth}km\n`
+    }
+    
+    if (eqListData.MaxIntensity && eqListData.MaxIntensity !== '不明') {
+        const intensity = normalizeIntensity(eqListData.MaxIntensity)
+        description += `**最大震度**: ${intensity}\n`
+    }
+    
+    if (eqListData.OriginTime) {
+        description += `**発生時刻**: ${eqListData.OriginTime}\n`
+    }
+    
+    embed.setDescription(description)
+    
+    // 震度画像の設定
+    if (eqListData.MaxIntensity && eqListData.MaxIntensity !== '不明') {
+        const imageUrl = getIntensityImageUrl(eqListData.MaxIntensity)
+        if (imageUrl) {
+            embed.setThumbnail(imageUrl)
+        }
+    }
+    
+    // 追加フィールド
+    const fields = []
+    
+    if (eqListData.EventID) {
+        fields.push({
+            name: 'イベントID',
+            value: eqListData.EventID,
+            inline: true
+        })
+    }
+    
+    // 各地の震度情報
+    if (eqListData.P2PArea && eqListData.P2PArea.length > 0) {
+        const shindoAreas: { [key: string]: string[] } = {}
+        
+        for (const area of eqListData.P2PArea) {
+            if (area.Chiiki && area.Shindo) {
+                const intensity = normalizeIntensity(area.Shindo)
+                if (!shindoAreas[intensity]) {
+                    shindoAreas[intensity] = []
+                }
+                shindoAreas[intensity].push(area.Chiiki)
+            }
+        }
+        
+        // 震度順に並べ替え
+        const sortedIntensities = Object.keys(shindoAreas).sort((a, b) => {
+            const order = ['7', '6強', '6弱', '5強', '5弱', '4', '3', '2', '1']
+            return order.indexOf(a) - order.indexOf(b)
+        })
+        
+        for (const intensity of sortedIntensities) {
+            const areas = shindoAreas[intensity]
+            if (areas.length > 0) {
+                // 地域名が長すぎる場合は省略
+                let areaText = areas.join('、')
+                if (areaText.length > 1000) {
+                    areaText = areaText.substring(0, 997) + '...'
+                }
+                
+                fields.push({
+                    name: `震度${intensity}`,
+                    value: areaText,
+                    inline: false
+                })
+            }
+        }
+    }
+    
+    embed.addFields(fields)
+    
+    // 地図生成
+    const files: AttachmentBuilder[] = []
+    
+    try {
+        // 環境変数チェック
+        const skipMapGeneration = process.env.SKIP_MAP_GENERATION === 'true'
+        const forceMapGeneration = process.env.FORCE_MAP_GENERATION === 'true'
+        
+        if (!skipMapGeneration && (forceMapGeneration || process.env.NODE_ENV !== 'production')) {
+            console.log('EQList地図生成を開始...')
+            
+            const { earthquakeData, areaInfo } = createMapDataFromEQListData(eqListData)
+            const mapPath = await generateEarthquakeMap(earthquakeData, areaInfo)
+            
+            if (mapPath && fs.existsSync(mapPath)) {
+                const mapFile = new AttachmentBuilder(mapPath, { name: 'earthquake_map.png' })
+                files.push(mapFile)
+                embed.setImage('attachment://earthquake_map.png')
+                console.log('✅ EQList地図生成成功')
+            } else {
+                console.log('⚠️ EQList地図生成失敗 - ファイルが見つかりません')
+            }
+        } else {
+            console.log('EQList地図生成スキップ（環境変数設定）')
+        }
+    } catch (mapError) {
+        console.error('EQList地図生成エラー:', mapError)
+    }
+    
+    // フッター
+    embed.setFooter({
+        text: `データ提供: Wolfix API | ${new Date().toLocaleString('ja-JP')}`
+    })
+    
+    embed.setTimestamp()
+    
+    console.log('=== EQList埋め込み作成完了 ===')
+    
+    return { embed, files: files.length > 0 ? files : undefined }
+}
+
+/**
  * 緊急地震速報の処理（リアルタイム用）
  */
 export async function processEarthquakeAlert(): Promise<{ embed: EmbedBuilder, files?: AttachmentBuilder[], wolfixData?: WolfixEEWData } | null> {
@@ -467,24 +823,41 @@ export async function processEarthquakeAlert(): Promise<{ embed: EmbedBuilder, f
 }
 
 /**
- * 最新地震情報の取得（コマンド用）
+ * 最新地震情報の取得（コマンド用） - EQList API不具合時のフォールバック対応
  */
-export async function getLatestEarthquakeInfo(): Promise<{ embed: EmbedBuilder, files?: AttachmentBuilder[], wolfixData?: WolfixEEWData } | null> {
+export async function getLatestEarthquakeInfo(): Promise<{ embed: EmbedBuilder, files?: AttachmentBuilder[], eqListData?: WolfixEQListData, wolfixData?: WolfixEEWData } | null> {
     try {
-        console.log('=== 最新地震情報取得開始 ===')
+        console.log('=== 最新地震情報取得開始（EQList API → EEW APIフォールバック） ===')
         
-        const wolfixData = await fetchWolfixEarthquakeData()
-        if (!wolfixData) {
-            console.log('❌ 地震データが取得できませんでした')
-            return null
+        // まずEQList APIを試行
+        const eqListData = await fetchWolfixEarthquakeList()
+        
+        // EQList APIのデータが不完全の場合、EEW APIをフォールバックとして使用
+        if (!eqListData || !eqListData.Hypocenter) {
+            console.log('⚠️ EQList APIデータが不完全 - EEW APIをフォールバックとして使用')
+            
+            const wolfixData = await fetchWolfixEarthquakeData()
+            if (!wolfixData) {
+                console.log('❌ 両方のAPIから地震データが取得できませんでした')
+                return null
+            }
+            
+            const result = await createEarthquakeEmbed(wolfixData, false)
+            
+            console.log('✅ 最新地震情報取得完了（EEW APIフォールバック）')
+            return {
+                ...result,
+                wolfixData  // EEW APIデータを返す
+            }
         }
         
-        const result = await createEarthquakeEmbed(wolfixData, false)
+        // EQList APIデータが正常な場合
+        const result = await createEarthquakeEmbedFromEQList(eqListData)
         
-        console.log('✅ 最新地震情報取得完了')
+        console.log('✅ 最新地震情報取得完了（EQList API）')
         return {
             ...result,
-            wolfixData
+            eqListData
         }
         
     } catch (error) {

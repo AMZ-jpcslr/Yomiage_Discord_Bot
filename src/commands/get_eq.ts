@@ -3,7 +3,7 @@
  */
 
 import { SlashCommandBuilder, ChatInputCommandInteraction } from 'discord.js'
-import { getLatestEarthquakeInfo } from '../utils/earthquake'
+import { getLatestEarthquakeInfo } from '../utils/earthquake_new'
 
 export const data = new SlashCommandBuilder()
     .setName('get_eq')
@@ -24,12 +24,20 @@ export async function execute(interaction: ChatInputCommandInteraction) {
             return
         }
         
-        const { embed, files, wolfixData } = result
+        const { embed, files, eqListData, wolfixData } = result
         
         console.log(`✅ 地震情報取得成功:`)
-        console.log(`  震源地: ${wolfixData?.Hypocenter || '不明'}`)
-        console.log(`  マグニチュード: M${wolfixData?.Magunitude || '不明'}`)
-        console.log(`  最大震度: ${wolfixData?.MaxIntensity || '不明'}`)
+        if (eqListData) {
+            console.log(`  震源地: ${eqListData.Hypocenter || '不明'}`)
+            console.log(`  マグニチュード: M${eqListData.Magnitude || '不明'}`)
+            console.log(`  最大震度: ${eqListData.MaxIntensity || '不明'}`)
+            console.log(`  データソース: EQList API`)
+        } else if (wolfixData) {
+            console.log(`  震源地: ${wolfixData.Hypocenter || '不明'}`)
+            console.log(`  マグニチュード: M${wolfixData.Magunitude || '不明'}`)
+            console.log(`  最大震度: ${wolfixData.MaxIntensity || '不明'}`)
+            console.log(`  データソース: EEW API (フォールバック)`)
+        }
         console.log(`  地図ファイル数: ${files?.length || 0}`)
         
         await interaction.editReply({

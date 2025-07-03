@@ -10,7 +10,7 @@ import * as shiftCommand from './commands/shift'
 import * as setEqChannelCommand from './commands/set_eq_channel'
 import * as getEqCommand from './commands/get_eq'  // 新しい実装
 import dotenv from 'dotenv'
-import { monitorEarthquakeAlerts } from './eq_notify'  // 新しい通知システム
+import { monitorEarthquakeAlerts } from './eq_notify_new'  // 新しい通知システム
 import * as http from 'http'
 
 // 新しい実装をエクスポート（テスト用）
