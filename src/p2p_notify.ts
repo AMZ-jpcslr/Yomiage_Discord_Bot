@@ -13,7 +13,9 @@ interface EQChannelConfig {
 }
 
 // 前回の通知データを保存するためのファイル
-const LAST_NOTIFICATION_FILE = path.join(__dirname, '../../data/last_p2p_notification.json')
+const DATA_DIR = path.resolve(__dirname, '../data')
+const LAST_NOTIFICATION_FILE = path.join(DATA_DIR, 'last_p2p_notification.json')
+const EQ_CHANNELS_FILE = path.join(DATA_DIR, 'eq_channels.json')
 
 interface LastNotificationData {
     [key: string]: {
@@ -43,9 +45,8 @@ function loadLastNotificationData(): LastNotificationData {
  */
 function saveLastNotificationData(id: string, isIncomplete: boolean = false): void {
     try {
-        const dir = path.dirname(LAST_NOTIFICATION_FILE)
-        if (!fs.existsSync(dir)) {
-            fs.mkdirSync(dir, { recursive: true })
+        if (!fs.existsSync(DATA_DIR)) {
+            fs.mkdirSync(DATA_DIR, { recursive: true })
         }
         
         const allData = loadLastNotificationData()
@@ -66,13 +67,19 @@ function saveLastNotificationData(id: string, isIncomplete: boolean = false): vo
  */
 function loadEQChannels(): EQChannelConfig {
     try {
-        const channelsPath = path.join(__dirname, '../../data/eq_channels.json')
-        if (fs.existsSync(channelsPath)) {
-            const data = fs.readFileSync(channelsPath, 'utf8')
-            return JSON.parse(data)
+        console.log(`📁 チャンネル設定ファイルパス: ${EQ_CHANNELS_FILE}`)
+        
+        if (fs.existsSync(EQ_CHANNELS_FILE)) {
+            const data = fs.readFileSync(EQ_CHANNELS_FILE, 'utf8')
+            const channels = JSON.parse(data)
+            console.log(`✅ チャンネル設定読み込み成功: ${Object.keys(channels).length}サーバー設定済み`)
+            console.log(`設定内容:`, channels)
+            return channels
+        } else {
+            console.log('⚠️ チャンネル設定ファイルが存在しません:', EQ_CHANNELS_FILE)
         }
     } catch (error) {
-        console.error('チャンネル設定の読み込みエラー:', error)
+        console.error('❌ チャンネル設定の読み込みエラー:', error)
     }
     return {}
 }
@@ -319,8 +326,12 @@ async function sendP2PNotification(client: Client, p2pData: P2PQuakeData, isInco
     
     const eqChannels = loadEQChannels()
     
+    console.log(`🔍 読み込んだチャンネル設定:`, eqChannels)
+    console.log(`📊 設定済みサーバー数: ${Object.keys(eqChannels).length}`)
+    
     if (Object.keys(eqChannels).length === 0) {
         console.log('⚠️ 通知チャンネルが設定されていません')
+        console.log('💡 /set_eq_channel コマンドでチャンネルを設定してください')
         return
     }
     

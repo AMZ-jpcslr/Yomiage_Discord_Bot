@@ -2,15 +2,28 @@ import { SlashCommandBuilder, ChatInputCommandInteraction, ChannelType } from 'd
 import fs from 'fs'
 import path from 'path'
 
-const DATA_PATH = path.join(__dirname, '../../data/eq_channels.json')
+const DATA_PATH = path.resolve(__dirname, '../data/eq_channels.json')
 
 function loadChannels(): Record<string, string> {
-    if (!fs.existsSync(DATA_PATH)) return {}
-    return JSON.parse(fs.readFileSync(DATA_PATH, 'utf8'))
+    console.log(`📁 [set_eq_channel] チャンネル設定ファイルパス: ${DATA_PATH}`)
+    if (!fs.existsSync(DATA_PATH)) {
+        console.log('⚠️ [set_eq_channel] チャンネル設定ファイルが存在しません')
+        return {}
+    }
+    const data = JSON.parse(fs.readFileSync(DATA_PATH, 'utf8'))
+    console.log(`✅ [set_eq_channel] チャンネル設定読み込み: ${Object.keys(data).length}サーバー`)
+    return data
 }
+
 function saveChannels(data: Record<string, string>) {
-    fs.mkdirSync(path.dirname(DATA_PATH), { recursive: true })
+    const dir = path.dirname(DATA_PATH)
+    if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true })
+        console.log(`📁 [set_eq_channel] ディレクトリ作成: ${dir}`)
+    }
     fs.writeFileSync(DATA_PATH, JSON.stringify(data, null, 2), 'utf8')
+    console.log(`💾 [set_eq_channel] チャンネル設定保存完了: ${DATA_PATH}`)
+    console.log(`保存内容:`, data)
 }
 
 export const data = new SlashCommandBuilder()
