@@ -67,26 +67,42 @@ function loadEQChannels(): EQChannelConfig {
 }
 
 /**
- * 重複通知チェック
+ * 重複通知チェック（改良版：より積極的に通知）
  */
 function isDuplicateNotification(eventId: string, serial: number): boolean {
     const lastData = loadLastNotificationData()
     
     if (!lastData) {
+        console.log('初回通知: 通知を送信します')
         return false  // 初回通知
     }
     
-    // 同じイベントIDで同じかより古いシリアル番号の場合は重複
-    if (lastData.eventId === eventId && lastData.serial >= serial) {
-        console.log(`重複通知検出: EventID=${eventId}, Serial=${serial} (前回: ${lastData.serial})`)
-        return true
+    // 異なるイベントIDの場合は常に通知
+    if (lastData.eventId !== eventId) {
+        console.log(`新しいイベント検出: ${eventId} (前回: ${lastData.eventId})`)
+        return false
     }
     
-    // 5分以内の通知は重複とみなす（異なるイベントでも）
-    const now = Date.now()
-    if (now - lastData.timestamp < 5 * 60 * 1000) {
-        console.log(`短時間重複通知検出: 前回から${Math.round((now - lastData.timestamp) / 1000)}秒`)
-        return true
+    // 同じイベントIDで新しいシリアル番号の場合は通知
+    if (lastData.eventId === eventId && serial > lastData.serial) {
+        console.log(`続報検出: EventID=${eventId}, Serial=${serial} (前回: ${lastData.serial})`)
+        return false
+    }
+    
+    // 同じイベントID・同じシリアル番号の場合のみ重複とみなす
+    if (lastData.eventId === eventId && lastData.serial === serial) {
+        const now = Date.now()
+        const timeDiff = now - lastData.timestamp
+        
+        // 1分以内の同一通知は重複
+        if (timeDiff < 60 * 1000) {
+            console.log(`重複通知検出: 同一データを${Math.round(timeDiff / 1000)}秒前に送信済み`)
+            return true
+        } else {
+            // 1分以上経過していれば再通知
+            console.log(`時間経過により再通知: ${Math.round(timeDiff / 1000)}秒経過`)
+            return false
+        }
     }
     
     return false

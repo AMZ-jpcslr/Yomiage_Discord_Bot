@@ -445,10 +445,10 @@ function convertEQListToMapAreas(p2pAreas: WolfixEQListData['P2PArea']): { [key:
 }
 
 /**
- * Wolfix地震データから地図生成用データを作成
+ * Wolfix地震データから地図生成用データを作成（改良版：震度表示強化）
  */
 function createMapDataFromWolfixData(wolfixData: WolfixEEWData): { earthquakeData: EarthquakeMapData, areaInfo: AreaInfo } {
-    console.log('=== 地図データ作成開始 ===')
+    console.log('=== 地図データ作成開始（震度表示強化版） ===')
     
     // 震源地座標（必須）
     const longitude = wolfixData.Longitude || 139.69  // デフォルト: 東京
@@ -468,17 +468,109 @@ function createMapDataFromWolfixData(wolfixData: WolfixEEWData): { earthquakeDat
     }
     
     // エリア情報
-    const areas = convertWarnAreaToMapAreas(wolfixData.WarnArea)
+    let areas = convertWarnAreaToMapAreas(wolfixData.WarnArea)
+    
+    // WarnAreaが空または少ない場合、震源地周辺に疑似震度データを追加
+    if (Object.keys(areas).length === 0 && wolfixData.MaxIntensity && wolfixData.MaxIntensity !== '不明') {
+        console.log('WarnAreaデータが不足 - 震源地周辺に疑似震度データを追加')
+        
+        const maxIntensity = normalizeIntensity(wolfixData.MaxIntensity)
+        
+        // 震源地周辺に疑似的な観測点を配置
+        const epicenterAreas = generateEpicenterAreas(longitude, latitude, maxIntensity)
+        areas = { ...areas, ...epicenterAreas }
+        
+        console.log(`疑似震度データ追加: ${Object.keys(epicenterAreas).length}種類の震度`)
+    }
+    
     const areaInfo: AreaInfo = {
         epicenter: [longitude, latitude],  // 経度, 緯度の順序
         areas: areas
     }
     
-    console.log('=== 地図データ作成完了 ===')
+    console.log('=== 地図データ作成完了（震度表示強化版） ===')
     console.log(`震源: [${areaInfo.epicenter[0]}, ${areaInfo.epicenter[1]}]`)
     console.log(`エリア種類数: ${Object.keys(areas).length}`)
+    Object.entries(areas).forEach(([intensity, coords]) => {
+        console.log(`  震度${intensity}: ${coords.length}箇所`)
+    })
     
     return { earthquakeData, areaInfo }
+}
+
+/**
+ * 震源地周辺に疑似的な震度分布を生成
+ */
+function generateEpicenterAreas(epicenterLon: number, epicenterLat: number, maxIntensity: string): { [key: string]: [number, number][] } {
+    console.log('=== 疑似震度分布生成開始 ===')
+    
+    const areas: { [key: string]: [number, number][] } = {}
+    
+    // 震度から数値への変換
+    const intensityToNumber = (intensity: string): number => {
+        const map: Record<string, number> = {
+            '7': 7, '6強': 6.5, '6弱': 6, '5強': 5.5, '5弱': 5, '4': 4, '3': 3, '2': 2, '1': 1
+        }
+        return map[intensity] || 1
+    }
+    
+    const maxIntensityNum = intensityToNumber(maxIntensity)
+    
+    // 距離と震度の関係を計算（簡易的な減衰式）
+    const calculateIntensity = (distance: number): string => {
+        // 距離による震度減衰（大まかな計算）
+        const attenuatedIntensity = Math.max(1, maxIntensityNum - distance * 0.5)
+        
+        if (attenuatedIntensity >= 7) return '7'
+        if (attenuatedIntensity >= 6.5) return '6強'
+        if (attenuatedIntensity >= 6) return '6弱'
+        if (attenuatedIntensity >= 5.5) return '5強'
+        if (attenuatedIntensity >= 5) return '5弱'
+        if (attenuatedIntensity >= 4) return '4'
+        if (attenuatedIntensity >= 3) return '3'
+        if (attenuatedIntensity >= 2) return '2'
+        return '1'
+    }
+    
+    // 震源地周辺の疑似観測点を生成
+    const distances = [0.1, 0.3, 0.5, 1.0, 1.5, 2.0, 3.0] // 度数での距離
+    const angles = [0, 45, 90, 135, 180, 225, 270, 315] // 8方向
+    
+    for (const distance of distances) {
+        for (const angle of angles) {
+            // 距離に応じた震度を計算
+            const intensity = calculateIntensity(distance)
+            
+            // 震度1以下は追加しない
+            if (intensityToNumber(intensity) < 2) continue
+            
+            // 座標計算（簡易的な円形配置）
+            const rad = (angle * Math.PI) / 180
+            const lon = epicenterLon + distance * Math.cos(rad)
+            const lat = epicenterLat + distance * Math.sin(rad)
+            
+            // 日本の範囲内チェック
+            if (lon >= 123 && lon <= 146 && lat >= 24 && lat <= 46) {
+                if (!areas[intensity]) {
+                    areas[intensity] = []
+                }
+                areas[intensity].push([lon, lat])
+            }
+        }
+    }
+    
+    // 震源地に最大震度を配置
+    if (!areas[maxIntensity]) {
+        areas[maxIntensity] = []
+    }
+    areas[maxIntensity].push([epicenterLon, epicenterLat])
+    
+    console.log('=== 疑似震度分布生成完了 ===')
+    Object.entries(areas).forEach(([intensity, coords]) => {
+        console.log(`  疑似震度${intensity}: ${coords.length}箇所`)
+    })
+    
+    return areas
 }
 
 /**
@@ -785,7 +877,7 @@ async function createEarthquakeEmbedFromEQList(eqListData: WolfixEQListData): Pr
 }
 
 /**
- * 緊急地震速報の処理（リアルタイム用）
+ * 緊急地震速報の処理（リアルタイム用） - 改良版：積極的通知
  */
 export async function processEarthquakeAlert(): Promise<{ embed: EmbedBuilder, files?: AttachmentBuilder[], wolfixData?: WolfixEEWData } | null> {
     try {
@@ -797,16 +889,46 @@ export async function processEarthquakeAlert(): Promise<{ embed: EmbedBuilder, f
             return null
         }
         
-        // キャンセル報や訓練報のスキップ判定
+        // 基本的な地震情報の存在チェック
+        if (!wolfixData.EventID || !wolfixData.Hypocenter) {
+            console.log('⚠️ 基本地震情報が不完全のため通知スキップ')
+            console.log(`EventID: ${wolfixData.EventID}, Hypocenter: ${wolfixData.Hypocenter}`)
+            return null
+        }
+        
+        // キャンセル報のスキップ（より緩い条件）
         if (wolfixData.isCancel) {
             console.log('⚠️ キャンセル報のためスキップ')
             return null
         }
         
-        if (wolfixData.isTraining && process.env.SKIP_TRAINING_EEW !== 'false') {
-            console.log('⚠️ 訓練報のためスキップ')
+        // 訓練報の処理（環境変数で制御、デフォルトは通知）
+        if (wolfixData.isTraining && process.env.SKIP_TRAINING_EEW === 'true') {
+            console.log('⚠️ 訓練報のためスキップ（環境変数設定）')
             return null
         }
+        
+        // 積極的通知：マグニチュード2.0以上、または震度1以上、またはWarnAreaがある場合に通知
+        const magnitude = wolfixData.Magunitude || 0
+        const maxIntensity = wolfixData.MaxIntensity || '不明'
+        const hasWarnArea = wolfixData.WarnArea && wolfixData.WarnArea.length > 0
+        
+        const shouldNotify = magnitude >= 2.0 || 
+                           maxIntensity !== '不明' || 
+                           hasWarnArea ||
+                           wolfixData.isWarn ||
+                           wolfixData.isFinal
+        
+        if (!shouldNotify) {
+            console.log('⚠️ 通知条件を満たさないためスキップ')
+            console.log(`マグニチュード: ${magnitude}, 最大震度: ${maxIntensity}, WarnArea: ${hasWarnArea}`)
+            return null
+        }
+        
+        console.log('✅ 緊急地震速報通知条件を満たしています')
+        console.log(`マグニチュード: M${magnitude}, 最大震度: ${maxIntensity}`)
+        console.log(`WarnArea数: ${wolfixData.WarnArea?.length || 0}`)
+        console.log(`警報: ${wolfixData.isWarn}, 最終報: ${wolfixData.isFinal}`)
         
         const result = await createEarthquakeEmbed(wolfixData, true)
         
