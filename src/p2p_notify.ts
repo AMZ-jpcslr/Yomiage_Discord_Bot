@@ -3,7 +3,7 @@
  */
 
 import { Client, TextChannel, EmbedBuilder, AttachmentBuilder } from 'discord.js'
-import { fetchP2PQuakeData, convertP2PDataToMapData, createP2PEarthquakeEmbed, P2PQuakeData } from './utils/p2p_earthquake'
+import { fetchAllP2PData, convertP2PDataToMapData, createP2PEarthquakeEmbed, P2PQuakeData, P2P_CODES } from './utils/p2p_earthquake'
 import { generateEarthquakeMap } from './utils/mapGenerator_new'
 import * as fs from 'fs'
 import * as path from 'path'
@@ -16,14 +16,17 @@ interface EQChannelConfig {
 const LAST_NOTIFICATION_FILE = path.join(__dirname, '../../data/last_p2p_notification.json')
 
 interface LastNotificationData {
-    id: string
-    timestamp: number
+    [key: string]: {
+        id: string
+        timestamp: number
+        isIncomplete: boolean  // 不完全データかどうか
+    }
 }
 
 /**
  * 前回の通知データを読み込み
  */
-function loadLastNotificationData(): LastNotificationData | null {
+function loadLastNotificationData(): LastNotificationData {
     try {
         if (fs.existsSync(LAST_NOTIFICATION_FILE)) {
             const data = fs.readFileSync(LAST_NOTIFICATION_FILE, 'utf8')
@@ -32,19 +35,27 @@ function loadLastNotificationData(): LastNotificationData | null {
     } catch (error) {
         console.error('前回通知データの読み込みエラー:', error)
     }
-    return null
+    return {}
 }
 
 /**
  * 通知データを保存
  */
-function saveLastNotificationData(data: LastNotificationData): void {
+function saveLastNotificationData(id: string, isIncomplete: boolean = false): void {
     try {
         const dir = path.dirname(LAST_NOTIFICATION_FILE)
         if (!fs.existsSync(dir)) {
             fs.mkdirSync(dir, { recursive: true })
         }
-        fs.writeFileSync(LAST_NOTIFICATION_FILE, JSON.stringify(data, null, 2))
+        
+        const allData = loadLastNotificationData()
+        allData[id] = {
+            id,
+            timestamp: Date.now(),
+            isIncomplete
+        }
+        
+        fs.writeFileSync(LAST_NOTIFICATION_FILE, JSON.stringify(allData, null, 2))
     } catch (error) {
         console.error('通知データの保存エラー:', error)
     }
@@ -67,83 +78,76 @@ function loadEQChannels(): EQChannelConfig {
 }
 
 /**
- * 重複通知チェック
+ * 重複通知チェック（更新情報対応）
  */
-function isDuplicateNotification(id: string): boolean {
-    const lastData = loadLastNotificationData()
+function shouldSendNotification(id: string, isIncomplete: boolean = false): boolean {
+    const allLastData = loadLastNotificationData()
+    const lastData = allLastData[id]
     
     if (!lastData) {
-        console.log('初回通知: 通知を送信します')
-        return false
+        console.log(`初回通知: ${id} を送信します`)
+        return true
     }
     
-    // 異なるIDの場合は常に通知
-    if (lastData.id !== id) {
-        console.log(`新しい地震情報検出: ${id} (前回: ${lastData.id})`)
-        return false
-    }
-    
-    // 同じIDの場合は重複
     const now = Date.now()
     const timeDiff = now - lastData.timestamp
     
-    // 1分以内の同一通知は重複
+    // 1分以内の重複チェック
     if (timeDiff < 60 * 1000) {
-        console.log(`重複通知検出: 同一データを${Math.round(timeDiff / 1000)}秒前に送信済み`)
-        return true
-    } else {
-        // 1分以上経過していれば再通知
-        console.log(`時間経過により再通知: ${Math.round(timeDiff / 1000)}秒経過`)
+        // 前回が不完全で今回が完全情報の場合は更新として送信
+        if (lastData.isIncomplete && !isIncomplete) {
+            console.log(`更新情報: ${id} - 不完全→完全情報への更新`)
+            return true
+        }
+        
+        console.log(`重複通知スキップ: ${id} (${Math.round(timeDiff / 1000)}秒前に送信済み)`)
         return false
     }
+    
+    // 1分以上経過していれば再通知
+    console.log(`時間経過により再通知: ${id} (${Math.round(timeDiff / 1000)}秒経過)`)
+    return true
 }
 
 /**
- * P2P地震情報通知を送信する共通関数
+ * データが不完全かどうかを判定（全種別対応）
  */
-async function sendP2PEarthquakeNotification(client: Client, embed: EmbedBuilder, files: AttachmentBuilder[] | undefined, p2pData: P2PQuakeData): Promise<void> {
-    const channels = loadEQChannels()
-    let notificationsSent = 0
+function isIncompleteEarthquakeData(p2pData: P2PQuakeData): boolean {
+    // 地震情報以外（津波、気象警報等）は基本的に完全とみなす
+    if (p2pData.code !== 551 && p2pData.code !== 552) {
+        // ただし、titleやtextが空の場合は不完全と判定
+        if (!p2pData.title && !p2pData.text && !p2pData.areas) {
+            return true
+        }
+        return false
+    }
     
-    for (const [guildId, channelId] of Object.entries(channels)) {
-        try {
-            const guild = client.guilds.cache.get(guildId)
-            if (!guild) {
-                console.log(`ギルドが見つかりません: ${guildId}`)
-                continue
-            }
-            
-            const channel = guild.channels.cache.get(channelId) as TextChannel
-            if (!channel) {
-                console.log(`チャンネルが見つかりません: ${channelId}`)
-                continue
-            }
-            
-            if (channel.type !== 0) {  // TEXT_CHANNEL
-                console.log(`テキストチャンネルではありません: ${channelId}`)
-                continue
-            }
-            
-            await channel.send({
-                embeds: [embed],
-                files: files || []
-            })
-            
-            notificationsSent++
-            console.log(`✅ 通知送信成功: ${guild.name} #${channel.name}`)
-            
-        } catch (channelError) {
-            console.error(`チャンネル通知エラー (${guildId}/${channelId}):`, channelError)
+    // 地震情報が存在しない
+    if (!p2pData.earthquake) {
+        return true
+    }
+    
+    // 震源地情報が不完全
+    if (!p2pData.earthquake.hypocenter) {
+        return true
+    }
+    
+    // 基本的な地震情報（名前、マグニチュード、座標）のいずれかが不明
+    if (!p2pData.earthquake.hypocenter.name || 
+        !p2pData.earthquake.hypocenter.magnitude ||
+        !p2pData.earthquake.hypocenter.longitude || 
+        !p2pData.earthquake.hypocenter.latitude) {
+        return true
+    }
+    
+    // 震度3以上で震度分布が不完全な場合
+    if (p2pData.earthquake.maxScale && p2pData.earthquake.maxScale >= 30) {
+        if (!p2pData.points || p2pData.points.length === 0) {
+            return true
         }
     }
     
-    // 通知データを保存
-    saveLastNotificationData({
-        id: p2pData.id,
-        timestamp: Date.now()
-    })
-    
-    console.log(`✅ P2P地震情報通知完了: ${notificationsSent}件送信`)
+    return false
 }
 
 /**
@@ -185,37 +189,32 @@ async function connectP2PEarthquakeWebSocket(client: Client): Promise<void> {
                 const message = data.toString()
                 console.log('📨 P2PWebSocketメッセージ受信:', message.substring(0, 100) + '...')
                 
-                const earthquakeData = JSON.parse(message) as P2PQuakeData
+                const p2pData = JSON.parse(message) as P2PQuakeData
                 
-                // 地震情報のコードチェック (551: 震度速報, 552: 震源・震度情報)
-                if (earthquakeData.code !== 551 && earthquakeData.code !== 552) {
-                    console.log('⚠️ 地震情報以外のデータを受信 - スキップ')
+                console.log(`📋 受信データ: コード${p2pData.code} - ${P2P_CODES[p2pData.code as keyof typeof P2P_CODES] || '未知の情報'}`)
+                
+                // 不完全データかどうかを判定
+                const isIncomplete = isIncompleteEarthquakeData(p2pData)
+                
+                // 通知すべきかチェック（更新情報も考慮）
+                if (!shouldSendNotification(p2pData.id, isIncomplete)) {
                     return
                 }
                 
-                if (!earthquakeData.id || !earthquakeData.earthquake) {
-                    console.log('⚠️ 不完全な地震データを受信 - スキップ')
-                    return
+                console.log('🚨 新しいP2P情報を検出（WebSocket）!')
+                console.log(`ID: ${p2pData.id}`)
+                console.log(`コード: ${p2pData.code}`)
+                console.log(`種別: ${P2P_CODES[p2pData.code as keyof typeof P2P_CODES] || '未知'}`)
+                console.log(`不完全データ: ${isIncomplete ? 'はい' : 'いいえ'}`)
+                
+                if (p2pData.earthquake?.hypocenter) {
+                    console.log(`震源地: ${p2pData.earthquake.hypocenter.name || '不明'}`)
+                    console.log(`マグニチュード: M${p2pData.earthquake.hypocenter.magnitude || '不明'}`)
+                    console.log(`最大震度: ${p2pData.earthquake.maxScale || '不明'}`)
                 }
                 
-                console.log('🚨 新しい地震情報をP2PWebSocketで受信!')
-                console.log(`ID: ${earthquakeData.id}`)
-                console.log(`震源地: ${earthquakeData.earthquake.hypocenter.name}`)
-                console.log(`マグニチュード: M${earthquakeData.earthquake.hypocenter.magnitude}`)
-                console.log(`最大震度: ${earthquakeData.earthquake.maxScale}`)
-                
-                // 重複チェック
-                if (isDuplicateNotification(earthquakeData.id)) {
-                    console.log('重複通知のためスキップ')
-                    return
-                }
-                
-                // 地震情報の処理とDiscord通知
-                const result = await processP2PEarthquakeDataForNotification(earthquakeData)
-                if (result) {
-                    const { embed, files } = result
-                    await sendP2PEarthquakeNotification(client, embed, files, earthquakeData)
-                }
+                // 全種別のP2P情報の処理とDiscord通知
+                await sendP2PNotification(client, p2pData, isIncomplete)
                 
             } catch (parseError) {
                 console.error('❌ P2PWebSocketメッセージ解析エラー:', parseError)
@@ -261,101 +260,125 @@ async function connectP2PEarthquakeWebSocket(client: Client): Promise<void> {
 }
 
 /**
- * フォールバック用HTTPポーリング
+ * フォールバック用HTTPポーリング（全種別対応）
  */
 async function fallbackP2PHttpPolling(client: Client): Promise<void> {
-    console.log('=== P2P地震情報HTTPポーリング開始 ===')
+    console.log('=== P2P全種別情報HTTPポーリング開始 ===')
     
     const checkInterval = 30000  // 30秒間隔
     
     setInterval(async () => {
         try {
-            const p2pDataArray = await fetchP2PQuakeData()
+            // 全種別の情報を取得
+            const p2pDataArray = await fetchAllP2PData()
             
             if (!p2pDataArray || p2pDataArray.length === 0) {
                 return
             }
             
-            // 最新の地震情報を取得
-            const p2pData = p2pDataArray[0]
-            
-            // 重複チェック
-            if (isDuplicateNotification(p2pData.id)) {
-                return
-            }
-            
-            console.log('=== 新しい地震情報を検出（P2P HTTPポーリング） ===')
-            console.log(`ID: ${p2pData.id}`)
-            console.log(`震源地: ${p2pData.earthquake.hypocenter.name}`)
-            console.log(`マグニチュード: M${p2pData.earthquake.hypocenter.magnitude}`)
-            
-            // 通知送信
-            const result = await processP2PEarthquakeDataForNotification(p2pData)
-            if (result) {
-                const { embed, files } = result
-                await sendP2PEarthquakeNotification(client, embed, files, p2pData)
+            // 最新のP2P情報を処理（複数件チェック）
+            for (const p2pData of p2pDataArray.slice(0, 5)) { // 最新5件をチェック
+                // 不完全データかどうかを判定
+                const isIncomplete = isIncompleteEarthquakeData(p2pData)
+                
+                // 重複チェック
+                if (!shouldSendNotification(p2pData.id, isIncomplete)) {
+                    continue
+                }
+                
+                console.log('=== 新しいP2P情報を検出（HTTPポーリング） ===')
+                console.log(`ID: ${p2pData.id}`)
+                console.log(`コード: ${p2pData.code}`)
+                console.log(`種別: ${P2P_CODES[p2pData.code as keyof typeof P2P_CODES] || '未知'}`)
+                console.log(`不完全データ: ${isIncomplete ? 'はい' : 'いいえ'}`)
+                
+                if (p2pData.earthquake?.hypocenter) {
+                    console.log(`震源地: ${p2pData.earthquake.hypocenter.name || '不明'}`)
+                    console.log(`マグニチュード: M${p2pData.earthquake.hypocenter.magnitude || '不明'}`)
+                }
+                
+                // P2P情報の処理とDiscord通知
+                await sendP2PNotification(client, p2pData, isIncomplete)
             }
             
         } catch (error) {
-            console.error('❌ P2P HTTPポーリング地震情報監視エラー:', error)
+            console.error('❌ P2P HTTPポーリング情報監視エラー:', error)
         }
     }, checkInterval)
     
-    console.log(`P2P HTTPポーリング設定完了 (${checkInterval}ms間隔)`)
+    console.log(`P2P全種別HTTPポーリング設定完了 (${checkInterval}ms間隔)`)
 }
 
 /**
- * P2PWebSocket受信データから通知用データを生成
+ * P2P情報の通知を送信（全種別対応）
  */
-async function processP2PEarthquakeDataForNotification(p2pData: P2PQuakeData): Promise<{ embed: EmbedBuilder, files?: AttachmentBuilder[] } | null> {
-    try {
-        // 通知条件のチェック
-        const magnitude = p2pData.earthquake.hypocenter.magnitude || 0
-        const maxScale = p2pData.earthquake.maxScale || 0
-        
-        const shouldNotify = magnitude >= 3.0 || maxScale >= 30 // M3.0以上または震度3以上
-        
-        if (!shouldNotify) {
-            console.log('⚠️ P2Pデータが通知条件を満たさない')
-            return null
-        }
-        
-        console.log('✅ P2Pデータが通知条件を満たします')
-        
-        // P2Pで受信したデータを直接使用してembed生成
-        const embed = createP2PEarthquakeEmbed(p2pData)
-        
-        let files: AttachmentBuilder[] | undefined
-        
-        // 地図生成（環境変数に応じて）
-        if (process.env.SKIP_MAP_GENERATION !== 'true') {
-            try {
-                console.log('🗺️ P2Pデータから地震マップ生成中...')
-                
-                // P2Pデータをマップデータに変換
-                const { earthquakeData, areaInfo } = convertP2PDataToMapData(p2pData)
-                const mapPath = await generateEarthquakeMap(earthquakeData, areaInfo)
-                
-                if (mapPath) {
-                    files = [new AttachmentBuilder(mapPath, { name: 'earthquake_map.png' })]
-                    console.log('✅ 地震マップ生成成功:', mapPath)
-                } else {
-                    console.log('⚠️ 地震マップ生成失敗')
-                }
-            } catch (mapError) {
-                console.error('❌ 地震マップ生成エラー:', mapError)
-            }
-        } else {
-            console.log('🚫 地図生成をスキップ（環境変数設定）')
-        }
-        
-        return {
-            embed,
-            files
-        }
-        
-    } catch (error) {
-        console.error('❌ P2P地震データ処理エラー:', error)
-        return null
+async function sendP2PNotification(client: Client, p2pData: P2PQuakeData, isIncomplete: boolean = false): Promise<void> {
+    console.log('📤 P2P情報の通知送信開始...')
+    console.log(`種別: ${P2P_CODES[p2pData.code as keyof typeof P2P_CODES] || '未知'} (コード: ${p2pData.code})`)
+    console.log(`不完全データ: ${isIncomplete ? 'はい' : 'いいえ'}`)
+    
+    const eqChannels = loadEQChannels()
+    
+    if (Object.keys(eqChannels).length === 0) {
+        console.log('⚠️ 通知チャンネルが設定されていません')
+        return
     }
+    
+    // Discord埋め込みを作成
+    const embed = createP2PEarthquakeEmbed(p2pData)
+    
+    // 不完全データの場合は警告を追加
+    if (isIncomplete) {
+        const currentDesc = embed.data.description || ''
+        const warning = '⚠️ **速報（不完全情報）** - 詳細情報が判明次第、更新をお送りします\n\n'
+        embed.setDescription(warning + currentDesc)
+        embed.setColor('#ff9900') // オレンジ色で警告
+    }
+    
+    const files: AttachmentBuilder[] = []
+    
+    // 地震情報で震源地がある場合は地図を生成
+    if ((p2pData.code === 551 || p2pData.code === 552) && 
+        p2pData.earthquake?.hypocenter?.longitude && 
+        p2pData.earthquake?.hypocenter?.latitude &&
+        !isIncomplete) { // 不完全データの場合は地図生成をスキップ
+        
+        try {
+            const mapData = convertP2PDataToMapData(p2pData)
+            if (mapData) {
+                const mapImagePath = await generateEarthquakeMap(mapData.earthquakeData, mapData.areaInfo)
+                if (mapImagePath) {
+                    const attachment = new AttachmentBuilder(mapImagePath, { name: 'earthquake_map.png' })
+                    files.push(attachment)
+                    console.log('🗾 地震マップ生成成功')
+                }
+            }
+        } catch (mapError) {
+            console.error('❌ 地震マップ生成エラー:', mapError)
+        }
+    }
+    
+    let successCount = 0
+    
+    // 各設定済みチャンネルに送信
+    for (const [, channelId] of Object.entries(eqChannels)) {
+        try {
+            const channel = await client.channels.fetch(channelId) as TextChannel
+            
+            if (channel && channel.isTextBased()) {
+                await channel.send({
+                    embeds: [embed],
+                    files: files
+                })
+                successCount++
+                console.log(`✅ P2P情報通知送信完了: ${channel.guild.name} #${channel.name}`)
+            }
+        } catch (channelError) {
+            console.error(`❌ チャンネル ${channelId} への送信エラー:`, channelError)
+        }
+    }
+    
+    // 通知履歴を保存
+    saveLastNotificationData(p2pData.id, isIncomplete)
+    console.log(`📝 通知履歴保存完了 (${successCount}チャンネルに送信済み)`)
 }

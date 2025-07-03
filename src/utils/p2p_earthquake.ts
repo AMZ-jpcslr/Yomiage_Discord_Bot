@@ -26,18 +26,18 @@ export interface P2PQuakeData {
     code: number
     time: string
     created_at?: string
-    earthquake: {
+    earthquake?: {
         time: string
-        hypocenter: {
+        hypocenter?: {
             name: string
-            latitude: number
-            longitude: number
-            depth: number
-            magnitude: number
+            latitude?: number
+            longitude?: number
+            depth?: number
+            magnitude?: number
         }
-        maxScale: number
-        domesticTsunami: string
-        foreignTsunami: string
+        maxScale?: number
+        domesticTsunami?: string
+        foreignTsunami?: string
     }
     issue: {
         source: string
@@ -45,7 +45,7 @@ export interface P2PQuakeData {
         type: string
         correct?: string
     }
-    points: Array<{
+    points?: Array<{
         pref: string
         addr: string
         scale: number
@@ -56,7 +56,32 @@ export interface P2PQuakeData {
     }
     user_agent?: string
     ver?: string
+    // 津波情報用
+    areas?: Array<{
+        grade?: string
+        immediate?: boolean
+        name?: string
+    }>
+    // 緊急地震速報用
+    cancelled?: boolean
+    // その他の情報用
+    title?: string
+    text?: string
 }
+
+// P2P地震情報コード定義
+export const P2P_CODES = {
+    551: '震度速報',
+    552: '震源・震度情報', 
+    554: '緊急地震速報（警報）',
+    555: '緊急地震速報（予報）',
+    556: '緊急地震速報（キャンセル）',
+    561: '津波注意報・警報',
+    562: '津波予報',
+    571: '気象警報・注意報',
+    581: '火山情報',
+    611: 'その他の防災気象情報'
+} as const
 
 // 震度コードから震度文字列への変換
 function scaleCodeToString(scale: number): string {
@@ -122,43 +147,89 @@ export async function fetchP2PQuakeData(): Promise<P2PQuakeData[] | null> {
 }
 
 /**
- * P2P地震情報データをマップ生成用に変換
+ * P2P APIから全種別の情報を取得（地震以外も含む）
  */
-export function convertP2PDataToMapData(p2pData: P2PQuakeData): { earthquakeData: EarthquakeMapData, areaInfo: AreaInfo } {
+export async function fetchAllP2PData(): Promise<P2PQuakeData[] | null> {
+    try {
+        console.log('📡 P2P APIから全種別の最新データを取得中...')
+        
+        // まず地震情報を取得
+        let response = await fetch('https://api.p2pquake.net/v2/jma/quake?limit=10&order=-1')
+        
+        if (!response.ok) {
+            // 地震情報APIが失敗した場合、全般情報APIを試行
+            console.log('地震情報API失敗、全般情報APIを試行中...')
+            response = await fetch('https://api.p2pquake.net/v2/history?limit=20&order=-1')
+        }
+        
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`)
+        }
+        
+        const data = await response.json()
+        
+        if (!data || data.length === 0) {
+            console.log('⚠️ P2P全種別データが見つかりません')
+            return null
+        }
+        
+        console.log(`✅ P2P全種別データ取得成功: ${data.length}件`)
+        console.log(`取得したコード: ${[...new Set(data.map((item: P2PQuakeData) => item.code))].join(', ')}`)
+        
+        return data as P2PQuakeData[]
+        
+    } catch (error) {
+        console.error('❌ P2P全種別API取得エラー:', error)
+        return null
+    }
+}
+
+/**
+ * P2P地震情報データをマップ生成用に変換（不完全データ対応）
+ */
+export function convertP2PDataToMapData(p2pData: P2PQuakeData): { earthquakeData: EarthquakeMapData, areaInfo: AreaInfo } | null {
     console.log('🔄 P2P地震情報データをマップ用に変換中...')
     
+    // 地震情報が存在しない場合はnullを返す
+    if (!p2pData.earthquake || !p2pData.earthquake.hypocenter) {
+        console.log('⚠️ 地震情報が不完全なため、マップ生成をスキップ')
+        return null
+    }
+    
     const earthquakeData = {
-        longitude: p2pData.earthquake.hypocenter.longitude,
-        latitude: p2pData.earthquake.hypocenter.latitude,
-        magnitude: p2pData.earthquake.hypocenter.magnitude,
-        depth: p2pData.earthquake.hypocenter.depth,
-        hypocenter: p2pData.earthquake.hypocenter.name,
-        maxScale: scaleCodeToString(p2pData.earthquake.maxScale),
-        originTime: p2pData.earthquake.time
+        longitude: p2pData.earthquake.hypocenter.longitude || 0,
+        latitude: p2pData.earthquake.hypocenter.latitude || 0,
+        magnitude: p2pData.earthquake.hypocenter.magnitude || 0,
+        depth: p2pData.earthquake.hypocenter.depth || 0,
+        hypocenter: p2pData.earthquake.hypocenter.name || '不明',
+        maxScale: scaleCodeToString(p2pData.earthquake.maxScale || 0),
+        originTime: p2pData.earthquake.time || p2pData.time
     }
     
     // 震度分布データを変換（より詳細に）
     const areas: { [key: string]: [number, number][] } = {}
     const prefectureIntensityMap: { [key: string]: string } = {}
     
-    for (const point of p2pData.points) {
-        const intensityKey = scaleCodeToString(point.scale)
-        
-        if (!areas[intensityKey]) {
-            areas[intensityKey] = []
-        }
-        
-        // 都道府県名を抽出
-        const prefName = point.pref
-        
-        // 座標推定（都道府県レベル）
-        const coords = estimateCoordinatesFromAddress(prefName)
-        if (coords) {
-            areas[intensityKey].push(coords)
-            // 都道府県ごとの最大震度を記録
-            if (!prefectureIntensityMap[prefName] || 
-                scaleStringToCode(intensityKey) > scaleStringToCode(prefectureIntensityMap[prefName])) {
-                prefectureIntensityMap[prefName] = intensityKey
+    if (p2pData.points) {
+        for (const point of p2pData.points) {
+            const intensityKey = scaleCodeToString(point.scale)
+            
+            if (!areas[intensityKey]) {
+                areas[intensityKey] = []
+            }
+            
+            // 都道府県名を抽出
+            const prefName = point.pref
+            
+            // 座標推定（都道府県レベル）
+            const coords = estimateCoordinatesFromAddress(prefName)
+            if (coords) {
+                areas[intensityKey].push(coords)
+                // 都道府県ごとの最大震度を記録
+                if (!prefectureIntensityMap[prefName] || 
+                    scaleStringToCode(intensityKey) > scaleStringToCode(prefectureIntensityMap[prefName])) {
+                    prefectureIntensityMap[prefName] = intensityKey
+                }
             }
         }
     }
@@ -177,72 +248,140 @@ export function convertP2PDataToMapData(p2pData: P2PQuakeData): { earthquakeData
 }
 
 /**
- * P2P地震情報からDiscord埋め込みを作成
+ * P2P地震情報からDiscord埋め込みを作成（不完全データ対応）
  */
 export function createP2PEarthquakeEmbed(p2pData: P2PQuakeData): EmbedBuilder {
-    console.log('📝 P2P地震情報埋め込み作成中...')
+    console.log('📝 P2P情報埋め込み作成中...')
+    
+    const codeDescription = P2P_CODES[p2pData.code as keyof typeof P2P_CODES] || `コード${p2pData.code}`
     
     const embed = new EmbedBuilder()
-        .setTitle('🚨 地震情報 (P2P地震情報)')
-        .setColor('#ff0000')
+        .setTitle(`🚨 ${codeDescription} (P2P地震情報)`)
         .setTimestamp(new Date(p2pData.time))
     
-    // 震源地情報
-    embed.addFields({
-        name: '📍 震源地',
-        value: p2pData.earthquake.hypocenter.name || '不明',
-        inline: true
-    })
-    
-    // マグニチュード
-    embed.addFields({
-        name: '📊 マグニチュード',
-        value: `M${p2pData.earthquake.hypocenter.magnitude}`,
-        inline: true
-    })
-    
-    // 最大震度
-    embed.addFields({
-        name: '🎯 最大震度',
-        value: scaleCodeToString(p2pData.earthquake.maxScale),
-        inline: true
-    })
-    
-    // 深さ
-    embed.addFields({
-        name: '📏 深さ',
-        value: `約${p2pData.earthquake.hypocenter.depth}km`,
-        inline: true
-    })
-    
-    // 発生時刻
-    embed.addFields({
-        name: '⏰ 発生時刻',
-        value: p2pData.earthquake.time,
-        inline: true
-    })
-    
-    // 津波情報
-    const tsunamiInfo = p2pData.earthquake.domesticTsunami
-    if (tsunamiInfo && tsunamiInfo !== 'None') {
+    // 情報種別に応じて色を設定
+    if (p2pData.code === 551 || p2pData.code === 552) {
+        embed.setColor('#ff0000') // 地震情報は赤
+    } else if (p2pData.code === 561 || p2pData.code === 562) {
+        embed.setColor('#0099ff') // 津波情報は青
+    } else if (p2pData.code === 571) {
+        embed.setColor('#ff9900') // 気象警報は橙
+    } else if (p2pData.code === 581) {
+        embed.setColor('#9900ff') // 火山情報は紫
+    } else if (p2pData.code >= 554 && p2pData.code <= 556) {
+        embed.setColor('#ffff00') // 緊急地震速報は黄
+    } else {
+        embed.setColor('#666666') // その他は灰色
+    }
+
+    // 地震情報の場合
+    if (p2pData.earthquake) {
+        // 震源地情報
         embed.addFields({
-            name: '🌊 津波',
-            value: tsunamiInfo,
+            name: '📍 震源地',
+            value: p2pData.earthquake.hypocenter?.name || '不明',
             inline: true
+        })
+        
+        // マグニチュード
+        embed.addFields({
+            name: '📊 マグニチュード',
+            value: p2pData.earthquake.hypocenter?.magnitude ? `M${p2pData.earthquake.hypocenter.magnitude}` : '不明',
+            inline: true
+        })
+        
+        // 最大震度
+        embed.addFields({
+            name: '🎯 最大震度',
+            value: p2pData.earthquake.maxScale ? scaleCodeToString(p2pData.earthquake.maxScale) : '不明',
+            inline: true
+        })
+        
+        // 深さ
+        embed.addFields({
+            name: '📏 深さ',
+            value: p2pData.earthquake.hypocenter?.depth ? `約${p2pData.earthquake.hypocenter.depth}km` : '不明',
+            inline: true
+        })
+        
+        // 発生時刻
+        embed.addFields({
+            name: '⏰ 発生時刻',
+            value: p2pData.earthquake.time || '不明',
+            inline: true
+        })
+        
+        // 津波情報
+        if (p2pData.earthquake.domesticTsunami && p2pData.earthquake.domesticTsunami !== 'None') {
+            embed.addFields({
+                name: '🌊 津波',
+                value: p2pData.earthquake.domesticTsunami,
+                inline: true
+            })
+        }
+        
+        // 震度分布（主要地点）
+        if (p2pData.points && p2pData.points.length > 0) {
+            const mainPoints = p2pData.points
+                .filter(point => point.scale >= 30) // 震度3以上
+                .slice(0, 10) // 最大10地点
+                .map(point => `${point.pref} ${point.addr}: 震度${scaleCodeToString(point.scale)}`)
+                .join('\n')
+            
+            if (mainPoints) {
+                embed.addFields({
+                    name: '📍 主な震度分布',
+                    value: mainPoints,
+                    inline: false
+                })
+            }
+        }
+    }
+    
+    // 緊急地震速報の場合のキャンセル表示
+    if (p2pData.cancelled) {
+        embed.addFields({
+            name: '❌ 状態',
+            value: 'キャンセル',
+            inline: false
         })
     }
     
-    // 震度分布（主要地点）
-    const mainPoints = p2pData.points
-        .filter(point => point.scale >= 30) // 震度3以上
-        .slice(0, 10) // 最大10地点
-        .map(point => `${point.pref} ${point.addr}: 震度${scaleCodeToString(point.scale)}`)
-        .join('\n')
-    
-    if (mainPoints) {
+    // その他の情報（津波、気象警報等）
+    if (p2pData.title) {
         embed.addFields({
-            name: '📍 主な震度分布',
-            value: mainPoints || '情報なし',
+            name: '📋 タイトル',
+            value: p2pData.title,
+            inline: false
+        })
+    }
+    
+    if (p2pData.text) {
+        embed.addFields({
+            name: '📄 詳細',
+            value: p2pData.text.length > 1000 ? p2pData.text.substring(0, 1000) + '...' : p2pData.text,
+            inline: false
+        })
+    }
+    
+    // 津波情報の対象地域
+    if (p2pData.areas && p2pData.areas.length > 0) {
+        const areasText = p2pData.areas
+            .map(area => `${area.name}: ${area.grade}${area.immediate ? ' (直ちに)' : ''}`)
+            .join('\n')
+        
+        embed.addFields({
+            name: '🌊 対象地域',
+            value: areasText.length > 1000 ? areasText.substring(0, 1000) + '...' : areasText,
+            inline: false
+        })
+    }
+    
+    // コメント情報
+    if (p2pData.comments?.freeFormComment) {
+        embed.addFields({
+            name: '💬 コメント',
+            value: p2pData.comments.freeFormComment,
             inline: false
         })
     }
@@ -252,7 +391,7 @@ export function createP2PEarthquakeEmbed(p2pData: P2PQuakeData): EmbedBuilder {
         text: `${p2pData.issue.source} | P2P地震情報 | ID: ${p2pData.id}`
     })
     
-    console.log('✅ P2P地震情報埋め込み作成完了')
+    console.log('✅ P2P情報埋め込み作成完了')
     return embed
 }
 
