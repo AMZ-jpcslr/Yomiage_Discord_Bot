@@ -76,18 +76,25 @@ function isDuplicateNotification(eventId: string, serial: number): boolean {
         return false  // 初回通知
     }
     
-    // 同じイベントIDで同じかより古いシリアル番号の場合は重複
+    // 異なるイベントIDの場合は新しい地震として通知
+    if (lastData.eventId !== eventId) {
+        console.log(`新しい地震イベント検出: ${eventId} (前回: ${lastData.eventId})`)
+        return false
+    }
+    
+    // 同じイベントIDでより新しいシリアル番号の場合は更新として通知
+    if (lastData.eventId === eventId && serial > lastData.serial) {
+        console.log(`地震情報更新検出: EventID=${eventId}, Serial=${serial} (前回: ${lastData.serial})`)
+        return false
+    }
+    
+    // 同じイベントIDで同じまたは古いシリアル番号の場合は重複
     if (lastData.eventId === eventId && lastData.serial >= serial) {
-        console.log(`重複通知検出: EventID=${eventId}, Serial=${serial} (前回: ${lastData.serial})`)
+        console.log(`重複通知スキップ: EventID=${eventId}, Serial=${serial} (前回: ${lastData.serial})`)
         return true
     }
     
-    // 5分以内の通知は重複とみなす（異なるイベントでも）
-    const now = Date.now()
-    if (now - lastData.timestamp < 5 * 60 * 1000) {
-        console.log(`短時間重複通知検出: 前回から${Math.round((now - lastData.timestamp) / 1000)}秒`)
-        return true
-    }
+    return false
     
     return false
 }
@@ -97,14 +104,17 @@ function isDuplicateNotification(eventId: string, serial: number): boolean {
  */
 export async function monitorEarthquakeAlerts(client: Client): Promise<void> {
     console.log('=== 緊急地震速報監視開始 ===')
+    console.log('Wolfix APIを2秒間隔で監視します')
     
-    const checkInterval = 5000  // 5秒間隔
+    const checkInterval = 2000  // 2秒間隔（より迅速な通知）
     
     setInterval(async () => {
         try {
+            console.log(`[${new Date().toISOString()}] Wolfix API監視チェック実行中...`)
             const result = await processEarthquakeAlert()
             
             if (!result) {
+                console.log('通知対象の地震情報なし')
                 return  // 通知対象なし
             }
             
@@ -117,16 +127,32 @@ export async function monitorEarthquakeAlerts(client: Client): Promise<void> {
             
             // 重複チェック
             const serial = wolfixData.Serial || 1
+            const lastData = loadLastNotificationData()
+            let updateMessage = ''
+            
             if (isDuplicateNotification(wolfixData.EventID, serial)) {
                 return  // 重複通知はスキップ
             }
             
+            // 更新情報を追加
+            if (lastData && lastData.eventId === wolfixData.EventID && serial > lastData.serial) {
+                updateMessage = ` (第${serial}報 - 情報更新)`
+            } else if (serial > 1) {
+                updateMessage = ` (第${serial}報)`
+            }
+            
             console.log('=== 新しい緊急地震速報を検出 ===')
-            console.log(`EventID: ${wolfixData.EventID}`)
+            console.log(`EventID: ${wolfixData.EventID}${updateMessage}`)
             console.log(`シリアル: ${serial}`)
             console.log(`震源地: ${wolfixData.Hypocenter}`)
             console.log(`マグニチュード: M${wolfixData.Magunitude}`)
             console.log(`最大震度: ${wolfixData.MaxIntensity}`)
+            
+            // 埋め込みタイトルに更新情報を追加
+            if (updateMessage) {
+                const currentTitle = embed.data.title || '緊急地震速報'
+                embed.setTitle(currentTitle + updateMessage)
+            }
             
             // 通知送信
             const channels = loadEQChannels()

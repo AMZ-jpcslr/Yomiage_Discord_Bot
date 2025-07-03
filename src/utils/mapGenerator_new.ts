@@ -114,6 +114,7 @@ export async function generateEarthquakeMap(earthquakeData: EarthquakeData, area
         const land_color = config.land_color
         const stroke_color = config.stroke_color
         const seismic_intensity_color = config.seismic_intensity_color
+        const epicenter_config = config.epicenter
         const seismic_intensity_config = config.seismic_intensity
         const copyright = config.copyright
         
@@ -462,34 +463,42 @@ export async function generateEarthquakeMap(earthquakeData: EarthquakeData, area
             throw new Error('Failed to project epicenter coordinates')
         }
         
-        // 震源地に震度円と数字を表示（添付画像のように）
-        const circleRadius = seismic_intensity_config.circle
+        // 震源地は赤いX印で表示
+        // Epicenter X mark background (earthquake-alert/map-draw style)
+        svg.append('line')
+            .attr('x1', epicenterCoord[0] - epicenter_config.size - epicenter_config.stroke_width)
+            .attr('x2', epicenterCoord[0] + epicenter_config.size + epicenter_config.stroke_width)
+            .attr('y1', epicenterCoord[1] - epicenter_config.size - epicenter_config.stroke_width)
+            .attr('y2', epicenterCoord[1] + epicenter_config.size + epicenter_config.stroke_width)
+            .attr('stroke-width', epicenter_config.width + epicenter_config.stroke_width * 2)
+            .style('stroke', epicenter_config.stroke)
         
-        // 震度円を描画
-        svg.append('circle')
-            .attr('r', circleRadius)
-            .attr('cx', epicenterCoord[0])
-            .attr('cy', epicenterCoord[1])
-            .style('fill', epicenterColor)
-            .style('stroke', '#000000')
-            .style('stroke-width', '2')
-            .style('filter', 'drop-shadow(1px 1px 3px rgba(0,0,0,0.6))')
+        svg.append('line')
+            .attr('x1', epicenterCoord[0] - epicenter_config.size - epicenter_config.stroke_width)
+            .attr('x2', epicenterCoord[0] + epicenter_config.size + epicenter_config.stroke_width)
+            .attr('y1', epicenterCoord[1] + epicenter_config.size + epicenter_config.stroke_width)
+            .attr('y2', epicenterCoord[1] - epicenter_config.size - epicenter_config.stroke_width)
+            .attr('stroke-width', epicenter_config.width + epicenter_config.stroke_width * 2)
+            .style('stroke', epicenter_config.stroke)
         
-        // 震度数字を円の中央に表示
-        svg.append('text')
-            .attr('x', epicenterCoord[0])
-            .attr('y', epicenterCoord[1] + 2) // わずかに下にずらす
-            .attr('text-anchor', 'middle')
-            .style('font-family', seismic_intensity_config.font)
-            .style('font-size', `${seismic_intensity_config.fontsize}px`)
-            .style('font-weight', 'bold')
-            .style('fill', '#000000')
-            .style('stroke', '#ffffff')
-            .style('stroke-width', '1')
-            .style('paint-order', 'stroke fill')
-            .text(epicenterIntensity)
+        // Epicenter X mark foreground (earthquake-alert/map-draw style)
+        svg.append('line')
+            .attr('x1', epicenterCoord[0] - epicenter_config.size)
+            .attr('x2', epicenterCoord[0] + epicenter_config.size)
+            .attr('y1', epicenterCoord[1] - epicenter_config.size)
+            .attr('y2', epicenterCoord[1] + epicenter_config.size)
+            .attr('stroke-width', epicenter_config.width)
+            .style('stroke', epicenter_config.color)
         
-        console.log(`震源地に震度円表示: 震度${epicenterIntensity}, 色:${epicenterColor}, 座標:[${epicenterCoord[0]}, ${epicenterCoord[1]}]`)
+        svg.append('line')
+            .attr('x1', epicenterCoord[0] - epicenter_config.size)
+            .attr('x2', epicenterCoord[0] + epicenter_config.size)
+            .attr('y1', epicenterCoord[1] + epicenter_config.size)
+            .attr('y2', epicenterCoord[1] - epicenter_config.size)
+            .attr('stroke-width', epicenter_config.width)
+            .style('stroke', epicenter_config.color)
+        
+        console.log(`震源地に赤いX印表示: 座標:[${epicenterCoord[0]}, ${epicenterCoord[1]}]`)
         
         // 震源地位置の検証用: 既知の場所にマーカーを追加
         console.log('=== 位置検証用マーカー追加 ===')
