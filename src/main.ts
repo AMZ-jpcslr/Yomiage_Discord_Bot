@@ -10,11 +10,8 @@ import * as shiftCommand from './commands/shift'
 import * as setEqChannelCommand from './commands/set_eq_channel'
 import * as getEqCommand from './commands/get_eq'  // 新しい実装
 import dotenv from 'dotenv'
-import { monitorEarthquakeAlerts } from './eq_notify_new'  // 新しい通知システム
+import { monitorP2PEarthquakeAlerts } from './p2p_notify'  // P2P地震情報通知システム
 import * as http from 'http'
-
-// 新しい実装をエクスポート（テスト用）
-export * from './utils/earthquake'
 
 dotenv.config()
 
@@ -164,9 +161,9 @@ client.once('ready', async () => {
         process.exit(0)
     })
 
-    // 新しい緊急地震速報監視システムを開始
-    console.log('🚨 緊急地震速報監視システム開始...')
-    monitorEarthquakeAlerts(client)
+    // P2P地震情報監視システムを開始
+    console.log('🚨 P2P地震情報監視システム開始...')
+    monitorP2PEarthquakeAlerts(client)
 })
 
 // エラーハンドリング
