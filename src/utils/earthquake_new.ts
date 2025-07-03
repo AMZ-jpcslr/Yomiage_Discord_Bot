@@ -532,8 +532,8 @@ function generateEpicenterAreas(epicenterLon: number, epicenterLat: number, maxI
         return '1'
     }
     
-    // 震源地周辺の疑似観測点を生成
-    const distances = [0.1, 0.3, 0.5, 1.0, 1.5, 2.0, 3.0] // 度数での距離
+    // 震源地周辺の疑似観測点を生成（震源地自体は除外）
+    const distances = [0.2, 0.5, 1.0, 1.5, 2.0, 3.0] // 度数での距離（震源地を避けるため0.1を除外）
     const angles = [0, 45, 90, 135, 180, 225, 270, 315] // 8方向
     
     for (const distance of distances) {
@@ -559,11 +559,7 @@ function generateEpicenterAreas(epicenterLon: number, epicenterLat: number, maxI
         }
     }
     
-    // 震源地に最大震度を配置
-    if (!areas[maxIntensity]) {
-        areas[maxIntensity] = []
-    }
-    areas[maxIntensity].push([epicenterLon, epicenterLat])
+    // 注意: 震源地には震度円を配置しない（赤いXマークのみ表示）
     
     console.log('=== 疑似震度分布生成完了 ===')
     Object.entries(areas).forEach(([intensity, coords]) => {

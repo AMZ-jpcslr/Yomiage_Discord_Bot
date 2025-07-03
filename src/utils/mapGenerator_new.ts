@@ -76,12 +76,26 @@ export async function generateEarthquakeMap(earthquakeData: EarthquakeData, area
         // Create d3 object similar to earthquake-alert/map-draw
         const d3 = Object.assign({}, d3Module, d3GeoModule)
         
-        // Load config file (earthquake-alert/map-draw compatible)
-        const configPath = path.join(__dirname, '../../config/config.json')
+        // Load config file (プロジェクトルートからの絶対パス)
+        // ビルド後は __dirname が build/src/utils になるため、3つ上がプロジェクトルート
+        const projectRoot = process.cwd() // プロセスの作業ディレクトリを使用
+        const configPath = path.join(projectRoot, 'config/config.json')
+        console.log('Config path:', configPath)
+        
+        if (!fs.existsSync(configPath)) {
+            throw new Error(`Config file not found: ${configPath}`)
+        }
+        
         const config: MapConfig = JSON.parse(fs.readFileSync(configPath, 'utf8'))
         
         // Load map data
-        const mapPath = path.join(__dirname, '../../', config.map)
+        const mapPath = path.join(projectRoot, config.map)
+        console.log('Map data path:', mapPath)
+        
+        if (!fs.existsSync(mapPath)) {
+            throw new Error(`Map data file not found: ${mapPath}`)
+        }
+        
         const mapData = JSON.parse(fs.readFileSync(mapPath, 'utf8'))
         
         // Create JSDOM environment for SVG (earthquake-alert/map-draw style)
@@ -353,58 +367,6 @@ export async function generateEarthquakeMap(earthquakeData: EarthquakeData, area
         
         console.log(`総観測点数: ${totalStations}`)
         
-        // 震源地付近の震度を表示（添付画像のように）
-        // 震源地の震度を推定または設定
-        let epicenterIntensity = '1' // デフォルト
-        let epicenterColor = seismic_intensity_color['1'] || '#0080ff'
-        
-        // 1. 最大震度から震源地震度を推定
-        if (earthquakeData.maxScale && earthquakeData.maxScale !== '不明') {
-            const maxScale = earthquakeData.maxScale.toString()
-            const maxScaleNum = parseInt(maxScale.replace(/[弱強\-+]/, ''))
-            
-            // 震源地は通常最大震度と同等かそれ以下になることが多い
-            if (maxScaleNum >= 4) {
-                epicenterIntensity = maxScale
-            } else if (maxScaleNum >= 2) {
-                epicenterIntensity = Math.max(1, maxScaleNum - 1).toString()
-            } else {
-                epicenterIntensity = maxScale
-            }
-            
-            // 色を設定
-            if (seismic_intensity_color[epicenterIntensity]) {
-                epicenterColor = seismic_intensity_color[epicenterIntensity]
-            } else if (epicenterIntensity.includes('弱') || epicenterIntensity.includes('-')) {
-                const baseLevel = epicenterIntensity.replace(/[弱-]/, '')
-                epicenterColor = seismic_intensity_color[`under_${baseLevel}`] || epicenterColor
-            } else if (epicenterIntensity.includes('強') || epicenterIntensity.includes('+')) {
-                const baseLevel = epicenterIntensity.replace(/[強+]/, '')
-                epicenterColor = seismic_intensity_color[`over_${baseLevel}`] || epicenterColor
-            }
-        }
-        
-        // 2. WarnAreaに震源地に近い地域があれば、その震度を採用
-        if (area_info.areas && Object.keys(area_info.areas).length > 0) {
-            for (const [intensity, coords] of Object.entries(area_info.areas)) {
-                for (const coord of coords) {
-                    // 震源地から近い観測点（0.5度以内）の震度を採用
-                    const distance = Math.sqrt(
-                        Math.pow(coord[0] - epicenter[0], 2) + 
-                        Math.pow(coord[1] - epicenter[1], 2)
-                    )
-                    if (distance < 0.5) {
-                        epicenterIntensity = intensity
-                        epicenterColor = seismic_intensity_color[intensity] || epicenterColor
-                        console.log(`震源地付近の観測点から震度${intensity}を採用`)
-                        break
-                    }
-                }
-            }
-        }
-        
-        console.log(`震源地震度設定: 震度${epicenterIntensity}, 色:${epicenterColor}`)
-        
         if (totalStations === 0) {
             console.warn('警告: 震度観測点データが見つかりませんでした。')
             console.warn('デバッグ: areas構造を確認:')
@@ -500,56 +462,6 @@ export async function generateEarthquakeMap(earthquakeData: EarthquakeData, area
         
         console.log(`震源地に赤いX印表示: 座標:[${epicenterCoord[0]}, ${epicenterCoord[1]}]`)
         
-        // 震源地位置の検証用: 既知の場所にマーカーを追加
-        console.log('=== 位置検証用マーカー追加 ===')
-        
-        // トカラ列島の主要な島々の座標
-        const referencePoints = [
-            { name: '悪石島', coords: [129.60, 29.45], color: '#00ff00' },
-            { name: '小宝島', coords: [129.22, 29.23], color: '#00ffff' },
-            { name: '宝島', coords: [129.20, 29.13], color: '#ffff00' }
-        ]
-        
-        // 震源地がトカラ列島近海の場合のみ参照マーカーを表示
-        if (earthquakeData.hypocenter && earthquakeData.hypocenter.includes('トカラ')) {
-            console.log('トカラ列島近海の地震のため、参照マーカーを追加します')
-            
-            for (const point of referencePoints) {
-                const refCoord = aProjection(point.coords)
-                if (refCoord) {
-                    // 参照点の円マーカー
-                    svg.append('circle')
-                        .attr('cx', refCoord[0])
-                        .attr('cy', refCoord[1])
-                        .attr('r', 8)
-                        .style('fill', point.color)
-                        .style('stroke', '#000000')
-                        .style('stroke-width', '2')
-                        .style('opacity', 0.8)
-                    
-                    // 参照点の名前ラベル
-                    svg.append('text')
-                        .text(point.name)
-                        .attr('x', refCoord[0] + 12)
-                        .attr('y', refCoord[1] + 4)
-                        .attr('font-size', 14)
-                        .attr('font-family', 'Arial, sans-serif')
-                        .style('fill', '#ffffff')
-                        .style('font-weight', 'bold')
-                        .style('text-shadow', '1px 1px 2px rgba(0,0,0,0.8)')
-                    
-                    console.log(`${point.name}: [${point.coords[0]}, ${point.coords[1]}] → [${refCoord[0].toFixed(1)}, ${refCoord[1].toFixed(1)}]px`)
-                    
-                    // 震源地との距離計算
-                    const distance = Math.sqrt(
-                        Math.pow(refCoord[0] - epicenterCoord[0], 2) + 
-                        Math.pow(refCoord[1] - epicenterCoord[1], 2)
-                    )
-                    console.log(`${point.name}から震源地までの画面上距離: ${distance.toFixed(1)}px`)
-                }
-            }
-        }
-        
         // Add copyright (earthquake-alert/map-draw style)
         svg.append('text')
             .text(copyright.text.join(' / '))
@@ -575,7 +487,7 @@ export async function generateEarthquakeMap(earthquakeData: EarthquakeData, area
         // Convert SVG to PNG using Sharp
         const timestamp = Date.now()
         const filename = `earthquake_map_${timestamp}.png`
-        const outputDir = path.join(__dirname, '../../generated_images')
+        const outputDir = path.join(process.cwd(), 'generated_images')
         
         // Ensure output directory exists
         if (!fs.existsSync(outputDir)) {
