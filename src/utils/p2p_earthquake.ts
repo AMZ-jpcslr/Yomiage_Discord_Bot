@@ -74,6 +74,23 @@ function scaleCodeToString(scale: number): string {
     return scaleMap[scale] || '不明'
 }
 
+// 震度文字列から震度コードへの変換（比較用）
+function scaleStringToCode(scale: string): number {
+    const scaleMap: { [key: string]: number } = {
+        '1': 10,
+        '2': 20, 
+        '3': 30,
+        '4': 40,
+        '5弱': 45,
+        '5強': 50,
+        '6弱': 55,
+        '6強': 60,
+        '7': 70,
+        '不明': 0
+    }
+    return scaleMap[scale] || 0
+}
+
 /**
  * P2P地震情報APIから最新の地震データを取得
  */
@@ -120,8 +137,9 @@ export function convertP2PDataToMapData(p2pData: P2PQuakeData): { earthquakeData
         originTime: p2pData.earthquake.time
     }
     
-    // 震度分布データを変換
+    // 震度分布データを変換（より詳細に）
     const areas: { [key: string]: [number, number][] } = {}
+    const prefectureIntensityMap: { [key: string]: string } = {}
     
     for (const point of p2pData.points) {
         const intensityKey = scaleCodeToString(point.scale)
@@ -130,10 +148,18 @@ export function convertP2PDataToMapData(p2pData: P2PQuakeData): { earthquakeData
             areas[intensityKey] = []
         }
         
-        // 座標推定（簡易的）- 実際の座標データがない場合の対応
-        const coords = estimateCoordinatesFromAddress(point.pref)
+        // 都道府県名を抽出
+        const prefName = point.pref
+        
+        // 座標推定（都道府県レベル）
+        const coords = estimateCoordinatesFromAddress(prefName)
         if (coords) {
             areas[intensityKey].push(coords)
+            // 都道府県ごとの最大震度を記録
+            if (!prefectureIntensityMap[prefName] || 
+                scaleStringToCode(intensityKey) > scaleStringToCode(prefectureIntensityMap[prefName])) {
+                prefectureIntensityMap[prefName] = intensityKey
+            }
         }
     }
     
@@ -145,6 +171,7 @@ export function convertP2PDataToMapData(p2pData: P2PQuakeData): { earthquakeData
     console.log('✅ P2P地震情報データ変換完了:')
     console.log(`  震源地: [${earthquakeData.longitude}, ${earthquakeData.latitude}]`)
     console.log(`  震度地点数: ${Object.values(areas).reduce((sum, coords) => sum + coords.length, 0)}`)
+    console.log(`  都道府県震度分布:`, prefectureIntensityMap)
     
     return { earthquakeData, areaInfo }
 }
@@ -229,60 +256,68 @@ export function createP2PEarthquakeEmbed(p2pData: P2PQuakeData): EmbedBuilder {
     return embed
 }
 
+// 都道府県の中心座標データ（概算）
+const PREFECTURE_COORDINATES: { [key: string]: [number, number] } = {
+    '北海道': [143.0642, 43.2203],
+    '青森県': [140.7402, 40.8244],
+    '岩手県': [141.1527, 39.7036],
+    '宮城県': [140.8719, 38.2682],
+    '秋田県': [140.1024, 39.7186],
+    '山形県': [140.3633, 38.2404],
+    '福島県': [140.4677, 37.7503],
+    '茨城県': [140.4467, 36.3418],
+    '栃木県': [139.8836, 36.5657],
+    '群馬県': [139.0608, 36.3910],
+    '埼玉県': [139.6489, 35.8617],
+    '千葉県': [140.1233, 35.6047],
+    '東京都': [139.6917, 35.6895],
+    '神奈川県': [139.6425, 35.4478],
+    '新潟県': [139.0235, 37.9026],
+    '富山県': [137.2112, 36.6953],
+    '石川県': [136.6256, 36.5944],
+    '福井県': [136.2220, 35.9434],
+    '山梨県': [138.5683, 35.6636],
+    '長野県': [138.1810, 36.6513],
+    '岐阜県': [137.2112, 35.3912],
+    '静岡県': [138.3829, 34.9769],
+    '愛知県': [137.1805, 35.1802],
+    '三重県': [136.5086, 34.7303],
+    '滋賀県': [135.8686, 35.0045],
+    '京都府': [135.7556, 35.0116],
+    '大阪府': [135.5200, 34.6937],
+    '兵庫県': [134.6900, 34.6913],
+    '奈良県': [135.8325, 34.6851],
+    '和歌山県': [135.1671, 34.2261],
+    '鳥取県': [134.2377, 35.5036],
+    '島根県': [133.0505, 35.4722],
+    '岡山県': [133.9344, 34.6617],
+    '広島県': [132.4596, 34.3963],
+    '山口県': [131.4706, 34.3860],
+    '徳島県': [134.5594, 34.0658],
+    '香川県': [134.0434, 34.3401],
+    '愛媛県': [132.7657, 33.8416],
+    '高知県': [133.5311, 33.5597],
+    '福岡県': [130.4184, 33.6064],
+    '佐賀県': [130.2989, 33.2494],
+    '長崎県': [129.8737, 32.7445],
+    '熊本県': [130.7417, 32.7898],
+    '大分県': [131.6127, 33.2382],
+    '宮崎県': [131.4214, 31.9110],
+    '鹿児島県': [130.5581, 31.5602],
+    '沖縄県': [127.6792, 26.2124]
+}
+
 /**
- * 地名から座標を推定（簡易版）
+ * 住所から座標を推定（都道府県レベル）
  */
-function estimateCoordinatesFromAddress(pref: string): [number, number] | null {
-    // 簡易的な都道府県中心座標データベース
-    const prefCoords: { [key: string]: [number, number] } = {
-        '北海道': [142.7, 43.2],
-        '青森県': [140.7, 40.8],
-        '岩手県': [141.2, 39.7],
-        '宮城県': [140.9, 38.3],
-        '秋田県': [140.1, 39.7],
-        '山形県': [140.4, 38.2],
-        '福島県': [140.5, 37.8],
-        '茨城県': [140.4, 36.3],
-        '栃木県': [139.9, 36.6],
-        '群馬県': [139.1, 36.4],
-        '埼玉県': [139.6, 35.9],
-        '千葉県': [140.1, 35.6],
-        '東京都': [139.7, 35.7],
-        '神奈川県': [139.4, 35.4],
-        '新潟県': [139.0, 37.5],
-        '富山県': [137.2, 36.7],
-        '石川県': [136.6, 36.6],
-        '福井県': [136.2, 35.9],
-        '山梨県': [138.6, 35.7],
-        '長野県': [138.2, 36.2],
-        '岐阜県': [137.2, 35.4],
-        '静岡県': [138.4, 34.9],
-        '愛知県': [137.0, 35.2],
-        '三重県': [136.5, 34.7],
-        '滋賀県': [136.0, 35.0],
-        '京都府': [135.8, 35.0],
-        '大阪府': [135.5, 34.7],
-        '兵庫県': [135.2, 34.7],
-        '奈良県': [135.8, 34.4],
-        '和歌山県': [135.2, 34.2],
-        '鳥取県': [134.2, 35.5],
-        '島根県': [132.6, 35.5],
-        '岡山県': [133.9, 34.7],
-        '広島県': [132.5, 34.4],
-        '山口県': [131.5, 34.2],
-        '徳島県': [134.6, 34.1],
-        '香川県': [134.0, 34.3],
-        '愛媛県': [132.8, 33.8],
-        '高知県': [133.5, 33.6],
-        '福岡県': [130.4, 33.6],
-        '佐賀県': [130.3, 33.2],
-        '長崎県': [129.9, 32.8],
-        '熊本県': [130.7, 32.8],
-        '大分県': [131.6, 33.2],
-        '宮崎県': [131.4, 31.9],
-        '鹿児島県': [130.6, 31.6],
-        '沖縄県': [127.7, 26.2]
+function estimateCoordinatesFromAddress(address: string): [number, number] | null {
+    // 都道府県名を抽出
+    for (const pref in PREFECTURE_COORDINATES) {
+        if (address.includes(pref) || address.includes(pref.replace('県', '').replace('府', '').replace('都', '').replace('道', ''))) {
+            return PREFECTURE_COORDINATES[pref]
+        }
     }
     
-    return prefCoords[pref] || null
+    console.log(`⚠️ 座標推定失敗: ${address}`)
+    return null
 }

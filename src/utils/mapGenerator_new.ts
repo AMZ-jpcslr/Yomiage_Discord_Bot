@@ -288,8 +288,8 @@ export async function generateEarthquakeMap(earthquakeData: EarthquakeData, area
             .attr('encoding', 'utf-8')
             .style('background-color', sea_color)
         
-        // Draw map with better stroke settings for improved clarity and detail
-        // 新しいprefectures.geojsonに最適化された描画設定
+        // Draw map with intensity-based coloring
+        // First pass: Draw base map
         svg.append('path')
             .datum(data)
             .attr('d', geoPath)
@@ -297,10 +297,62 @@ export async function generateEarthquakeMap(earthquakeData: EarthquakeData, area
             .attr('stroke-linejoin', 'round')
             .attr('stroke-linecap', 'round')
             .attr('stroke-miterlimit', 10)
-            .attr('vector-effect', 'non-scaling-stroke') // ズーム時の線幅維持
+            .attr('vector-effect', 'non-scaling-stroke')
             .style('fill', land_color)
             .style('stroke', stroke_color)
-            .style('shape-rendering', 'geometricPrecision') // より精密な描画
+            .style('shape-rendering', 'geometricPrecision')
+        
+        // Second pass: Color regions by intensity if data is available
+        if (data.features) {
+            // 都道府県名と震度のマッピングを作成
+            const prefectureIntensityMap: { [key: string]: string } = {}
+            
+            // 震度文字列をconfig色キーに変換するマッピング
+            const intensityToColorKey: { [key: string]: string } = {
+                '1': '1',
+                '2': '2',
+                '3': '3',
+                '4': '4',
+                '5弱': 'under_5',
+                '5強': 'over_5',
+                '6弱': 'under_6',
+                '6強': 'over_6',
+                '7': '7'
+            }
+            
+            // area_info.areasから都道府県別の震度を抽出
+            for (const intensityLevel in area_info.areas) {
+                const coords = area_info.areas[intensityLevel]
+                for (const coord of coords) {
+                    // 座標から都道府県を逆引き（簡易版）
+                    const prefName = findPrefectureByCoordinate(coord)
+                    if (prefName) {
+                        const colorKey = intensityToColorKey[intensityLevel] || intensityLevel
+                        prefectureIntensityMap[prefName] = colorKey
+                    }
+                }
+            }
+            
+            console.log('震度分布マッピング:', prefectureIntensityMap)
+            
+            // 各都道府県を震度に応じて色分け
+            data.features.forEach((feature: GeoJSON.Feature) => {
+                const prefName = feature.properties?.N03_001 || feature.properties?.name || feature.properties?.NAME_1
+                const colorKey = prefectureIntensityMap[prefName]
+                
+                if (colorKey && seismic_intensity_color[colorKey]) {
+                    console.log(`都道府県 ${prefName} を震度 ${colorKey} の色 ${seismic_intensity_color[colorKey]} で塗りつぶし`)
+                    svg.append('path')
+                        .datum(feature)
+                        .attr('d', geoPath)
+                        .attr('stroke-width', map_stroke)
+                        .style('fill', seismic_intensity_color[colorKey])
+                        .style('fill-opacity', 0.7)
+                        .style('stroke', stroke_color)
+                        .style('stroke-width', '1')
+                }
+            })
+        }
         
         // Seismic intensity plotting function (ultra-simple for reliability)
         const Export = (area: [number, number], color: string, text: string) => {
@@ -1143,4 +1195,78 @@ function getWarnAreaCoordinates(areaName: string): [number, number] | null {
     return null
 }
 
-// earthquake-alert/map-draw compatible interface
+/**
+ * 座標から都道府県名を逆引き（簡易版）
+ */
+function findPrefectureByCoordinate(coord: [number, number]): string | null {
+    const [longitude, latitude] = coord
+    
+    // 都道府県の中心座標データから最も近い都道府県を探す
+    let closestPref = null
+    let minDistance = Infinity
+    
+    for (const [prefName, prefCoord] of Object.entries(PREFECTURE_COORDINATES)) {
+        const distance = Math.sqrt(
+            Math.pow(longitude - prefCoord[0], 2) + 
+            Math.pow(latitude - prefCoord[1], 2)
+        )
+        
+        if (distance < minDistance) {
+            minDistance = distance
+            closestPref = prefName
+        }
+    }
+    
+    return closestPref
+}
+
+// 都道府県の中心座標データ（概算）
+const PREFECTURE_COORDINATES: { [key: string]: [number, number] } = {
+    '北海道': [143.0642, 43.2203],
+    '青森県': [140.7402, 40.8244],
+    '岩手県': [141.1527, 39.7036],
+    '宮城県': [140.8719, 38.2682],
+    '秋田県': [140.1024, 39.7186],
+    '山形県': [140.3633, 38.2404],
+    '福島県': [140.4677, 37.7503],
+    '茨城県': [140.4467, 36.3418],
+    '栃木県': [139.8836, 36.5657],
+    '群馬県': [139.0608, 36.3910],
+    '埼玉県': [139.6489, 35.8617],
+    '千葉県': [140.1233, 35.6047],
+    '東京都': [139.6917, 35.6895],
+    '神奈川県': [139.6425, 35.4478],
+    '新潟県': [139.0235, 37.9026],
+    '富山県': [137.2112, 36.6953],
+    '石川県': [136.6256, 36.5944],
+    '福井県': [136.2220, 35.9434],
+    '山梨県': [138.5683, 35.6636],
+    '長野県': [138.1810, 36.6513],
+    '岐阜県': [137.2112, 35.3912],
+    '静岡県': [138.3829, 34.9769],
+    '愛知県': [137.1805, 35.1802],
+    '三重県': [136.5086, 34.7303],
+    '滋賀県': [135.8686, 35.0045],
+    '京都府': [135.7556, 35.0116],
+    '大阪府': [135.5200, 34.6937],
+    '兵庫県': [134.6900, 34.6913],
+    '奈良県': [135.8325, 34.6851],
+    '和歌山県': [135.1671, 34.2261],
+    '鳥取県': [134.2377, 35.5036],
+    '島根県': [133.0505, 35.4722],
+    '岡山県': [133.9344, 34.6617],
+    '広島県': [132.4596, 34.3963],
+    '山口県': [131.4706, 34.3860],
+    '徳島県': [134.5594, 34.0658],
+    '香川県': [134.0434, 34.3401],
+    '愛媛県': [132.7657, 33.8416],
+    '高知県': [133.5311, 33.5597],
+    '福岡県': [130.4184, 33.6064],
+    '佐賀県': [130.2989, 33.2494],
+    '長崎県': [129.8737, 32.7445],
+    '熊本県': [130.7417, 32.7898],
+    '大分県': [131.6127, 33.2382],
+    '宮崎県': [131.4214, 31.9110],
+    '鹿児島県': [130.5581, 31.5602],
+    '沖縄県': [127.6792, 26.2124]
+}
