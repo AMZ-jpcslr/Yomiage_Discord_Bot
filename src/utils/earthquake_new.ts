@@ -8,7 +8,7 @@ import { generateEarthquakeMap } from './mapGenerator_new'
 import * as fs from 'fs'
 
 // Wolfix API データ型定義
-interface WolfixEEWData {
+export interface WolfixEEWData {
     Title?: string
     CodeType?: string
     Issue?: {
@@ -447,7 +447,7 @@ function convertEQListToMapAreas(p2pAreas: WolfixEQListData['P2PArea']): { [key:
 /**
  * Wolfix地震データから地図生成用データを作成（改良版：震度表示強化）
  */
-function createMapDataFromWolfixData(wolfixData: WolfixEEWData): { earthquakeData: EarthquakeMapData, areaInfo: AreaInfo } {
+export function createMapDataFromWolfixData(wolfixData: WolfixEEWData): { earthquakeData: EarthquakeMapData, areaInfo: AreaInfo } {
     console.log('=== 地図データ作成開始（震度表示強化版） ===')
     
     // 震源地座標（必須）
@@ -613,7 +613,7 @@ function createMapDataFromEQListData(eqListData: WolfixEQListData): { earthquake
 /**
  * 地震情報のDiscord埋め込みを作成
  */
-async function createEarthquakeEmbed(wolfixData: WolfixEEWData, isEEW: boolean = false): Promise<{ embed: EmbedBuilder, files?: AttachmentBuilder[] }> {
+export async function createEarthquakeEmbed(wolfixData: WolfixEEWData, isEEW: boolean = false): Promise<{ embed: EmbedBuilder, files?: AttachmentBuilder[] }> {
     console.log('=== 埋め込み作成開始 ===')
     
     const embed = new EmbedBuilder()
