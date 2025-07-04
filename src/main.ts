@@ -31,36 +31,45 @@ const client = new Client({
 
 // ステータスメッセージのバリエーション
 const statusMessages = [
-    'Wolfix API地震監視',
-    '緊急地震速報待機中',
-    '震源地マーク正確表示',
+    'P2P地震速報API地震使用',
+    'キヴォトスで業務中',
     '地震情報配信中',
-    'EEW監視システム稼働',
-    '地震速報24時間監視',
-    'Wolfix APIと連携',
-    'リアルタイム地震情報'
 ]
 
 // 時間帯別メッセージ
 const timeBasedMessages = {
-    morning: ['おはよう！地震監視中', 'モーニング地震情報'],
-    afternoon: ['午後も監視継続', '昼間安全確保'],
-    evening: ['夕方チェック中', 'イブニング監視'],
-    night: ['夜間24時間監視', 'ナイトモード稼働']
+    morning: ['おはようございます！', '省電力モードから復帰済み'],
+    afternoon: ['少し休憩しましょう！', '通常通り起動中'],
+    evening: ['今日もお疲れ様でした！', '省電力モード移行'],
+    night: ['おやすみなさい、先生', '夜間も稼働中']
 }
 
-// 現在時刻に応じたメッセージを取得
+// 日本標準時間（JST）を取得するヘルパー関数
+function getJSTTime(): Date {
+    const now = new Date()
+    const utc = now.getTime() + (now.getTimezoneOffset() * 60000)
+    return new Date(utc + (9 * 3600000)) // UTC+9時間
+}
+
+// 現在時刻に応じたメッセージを取得（日本標準時間基準）
 function getTimeBasedMessage(): string {
-    const hour = new Date().getHours()
+    // 日本標準時間（JST）を取得
+    const jstTime = getJSTTime()
+    const jstHour = jstTime.getHours()
+    
     let timeCategory: keyof typeof timeBasedMessages
     
-    if (hour >= 6 && hour < 12) timeCategory = 'morning'
-    else if (hour >= 12 && hour < 18) timeCategory = 'afternoon'
-    else if (hour >= 18 && hour < 22) timeCategory = 'evening'
+    if (jstHour >= 6 && jstHour < 12) timeCategory = 'morning'
+    else if (jstHour >= 12 && jstHour < 18) timeCategory = 'afternoon'
+    else if (jstHour >= 18 && jstHour < 22) timeCategory = 'evening'
     else timeCategory = 'night'
     
     const messages = timeBasedMessages[timeCategory]
-    return messages[Math.floor(Math.random() * messages.length)]
+    const selectedMessage = messages[Math.floor(Math.random() * messages.length)]
+    
+    console.log(`🕐 JST時間: ${jstTime.toLocaleString('ja-JP')} (${jstHour}時) → ${timeCategory} → "${selectedMessage}"`)
+    
+    return selectedMessage
 }
 
 // Botのプレゼンス（ステータス）を設定
@@ -185,18 +194,20 @@ const port = process.env.PORT || 3000
 
 const server = http.createServer((req, res) => {
     if (req.url === '/health') {
+        const jstTime = getJSTTime()
         res.writeHead(200, { 'Content-Type': 'application/json' })
         res.end(JSON.stringify({
             status: 'OK',
             timestamp: new Date().toISOString(),
+            jstTimestamp: jstTime.toLocaleString('ja-JP'),
             botStatus: client.user ? 'online' : 'offline',
             guilds: client.guilds.cache.size,
             uptime: process.uptime(),
-            system: 'Wolfix API地震監視システム'
+            system: 'P2P地震情報監視システム'
         }))
     } else if (req.url === '/') {
         res.writeHead(200, { 'Content-Type': 'text/plain' })
-        res.end('Discord 地震速報ボット (Wolfix API) は正常に動作中です！')
+        res.end('Discord 地震速報ボット (P2P地震情報API) は正常に動作中です！')
     } else {
         res.writeHead(404)
         res.end('Not Found')
