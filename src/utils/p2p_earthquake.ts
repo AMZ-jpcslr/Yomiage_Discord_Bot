@@ -18,6 +18,15 @@ interface EarthquakeMapData {
 interface AreaInfo {
     epicenter: [number, number]
     areas: { [key: string]: [number, number][] }
+    // 市町村レベルの詳細情報を追加
+    detailedAreas?: { 
+        [intensity: string]: Array<{
+            prefecture: string
+            city: string
+            coordinates: [number, number]
+            fullAddress: string
+        }>
+    }
 }
 
 // P2P地震情報APIのデータ型定義
@@ -206,43 +215,91 @@ export function convertP2PDataToMapData(p2pData: P2PQuakeData): { earthquakeData
         originTime: p2pData.earthquake.time || p2pData.time
     }
     
-    // 震度分布データを変換（より詳細に）
+    // 震度分布データを変換（市町村レベル詳細対応）
     const areas: { [key: string]: [number, number][] } = {}
+    const detailedAreas: { [intensity: string]: Array<{
+        prefecture: string
+        city: string
+        coordinates: [number, number]
+        fullAddress: string
+    }> } = {}
     const prefectureIntensityMap: { [key: string]: string } = {}
     
     if (p2pData.points) {
+        console.log(`📍 処理する震度観測点数: ${p2pData.points.length}`)
+        
         for (const point of p2pData.points) {
             const intensityKey = scaleCodeToString(point.scale)
             
             if (!areas[intensityKey]) {
                 areas[intensityKey] = []
             }
+            if (!detailedAreas[intensityKey]) {
+                detailedAreas[intensityKey] = []
+            }
             
-            // 都道府県名を抽出
+            // 都道府県名と市町村名を抽出
             const prefName = point.pref
+            const fullAddress = point.addr || ''
             
-            // 座標推定（都道府県レベル）
-            const coords = estimateCoordinatesFromAddress(prefName)
-            if (coords) {
-                areas[intensityKey].push(coords)
-                // 都道府県ごとの最大震度を記録
-                if (!prefectureIntensityMap[prefName] || 
-                    scaleStringToCode(intensityKey) > scaleStringToCode(prefectureIntensityMap[prefName])) {
-                    prefectureIntensityMap[prefName] = intensityKey
+            // 市町村レベルの詳細座標を推定
+            const detailedCoords = estimateDetailedCoordinatesFromAddress(prefName, fullAddress)
+            if (detailedCoords) {
+                areas[intensityKey].push(detailedCoords)
+                
+                // 詳細情報も保存
+                detailedAreas[intensityKey].push({
+                    prefecture: prefName,
+                    city: fullAddress,
+                    coordinates: detailedCoords,
+                    fullAddress: `${prefName} ${fullAddress}`
+                })
+                
+                console.log(`  震度${intensityKey}: ${prefName} ${fullAddress} → [${detailedCoords[0].toFixed(3)}, ${detailedCoords[1].toFixed(3)}]`)
+            } else {
+                // フォールバック: 都道府県レベルの座標
+                const coords = estimateCoordinatesFromAddress(prefName)
+                if (coords) {
+                    areas[intensityKey].push(coords)
+                    detailedAreas[intensityKey].push({
+                        prefecture: prefName,
+                        city: fullAddress,
+                        coordinates: coords,
+                        fullAddress: `${prefName} ${fullAddress}`
+                    })
+                    
+                    console.log(`  震度${intensityKey}: ${prefName} ${fullAddress} → [${coords[0].toFixed(3)}, ${coords[1].toFixed(3)}] (都道府県レベル)`)
                 }
+            }
+            
+            // 都道府県ごとの最大震度を記録
+            if (!prefectureIntensityMap[prefName] || 
+                scaleStringToCode(intensityKey) > scaleStringToCode(prefectureIntensityMap[prefName])) {
+                prefectureIntensityMap[prefName] = intensityKey
             }
         }
     }
     
     const areaInfo: AreaInfo = { 
         epicenter: [earthquakeData.longitude, earthquakeData.latitude],
-        areas 
+        areas,
+        detailedAreas
     }
     
     console.log('✅ P2P地震情報データ変換完了:')
     console.log(`  震源地: [${earthquakeData.longitude}, ${earthquakeData.latitude}]`)
     console.log(`  震度地点数: ${Object.values(areas).reduce((sum, coords) => sum + coords.length, 0)}`)
-    console.log(`  都道府県震度分布:`, prefectureIntensityMap)
+    console.log(`  市町村別震度分布:`)
+    Object.entries(detailedAreas).forEach(([intensity, locations]) => {
+        console.log(`    震度${intensity}: ${locations.length}地域`)
+        locations.slice(0, 3).forEach(loc => {
+            console.log(`      - ${loc.fullAddress}`)
+        })
+        if (locations.length > 3) {
+            console.log(`      ...他${locations.length - 3}地域`)
+        }
+    })
+    console.log(`  都道府県最大震度分布:`, prefectureIntensityMap)
     
     return { earthquakeData, areaInfo }
 }
@@ -458,5 +515,107 @@ function estimateCoordinatesFromAddress(address: string): [number, number] | nul
     }
     
     console.log(`⚠️ 座標推定失敗: ${address}`)
+    return null
+}
+
+/**
+ * 市町村レベルの座標推定（詳細版）
+ */
+function estimateDetailedCoordinatesFromAddress(prefecture: string, address: string): [number, number] | null {
+    // まず都道府県の基本座標を取得
+    const baseCoords = estimateCoordinatesFromAddress(prefecture)
+    if (!baseCoords) {
+        return null
+    }
+    
+    // 市町村名から座標の微調整を行う（簡易版）
+    const cityOffsets = getCityOffsets(prefecture, address)
+    
+    if (cityOffsets) {
+        return [
+            baseCoords[0] + cityOffsets[0],
+            baseCoords[1] + cityOffsets[1]
+        ]
+    }
+    
+    // 市町村が見つからない場合は都道府県の座標を返す
+    return baseCoords
+}
+
+/**
+ * 市町村名に基づく座標オフセットを取得（簡易版）
+ */
+function getCityOffsets(prefecture: string, address: string): [number, number] | null {
+    // 主要都市の座標オフセット（都道府県中心からの相対位置）
+    const cityOffsetMap: { [key: string]: { [city: string]: [number, number] } } = {
+        '北海道': {
+            '札幌': [0.3, 0.0],
+            '函館': [-0.2, -1.0],
+            '旭川': [0.1, 1.2],
+            '釧路': [1.8, -0.5],
+            '帯広': [1.0, -0.8],
+            '北見': [1.0, 1.0],
+            '小樽': [0.2, 0.1]
+        },
+        '東京都': {
+            '新宿': [0.0, 0.0],
+            '渋谷': [-0.05, -0.02],
+            '品川': [0.05, -0.05],
+            '足立': [0.1, 0.1],
+            '八王子': [-0.3, -0.2],
+            '立川': [-0.2, -0.1],
+            '町田': [-0.2, -0.3]
+        },
+        '神奈川県': {
+            '横浜': [0.0, 0.0],
+            '川崎': [0.1, 0.05],
+            '相模原': [-0.2, -0.1],
+            '藤沢': [-0.1, -0.1],
+            '横須賀': [0.1, -0.2],
+            '平塚': [-0.2, 0.0],
+            '茅ヶ崎': [-0.15, -0.05]
+        },
+        '大阪府': {
+            '大阪': [0.0, 0.0],
+            '堺': [-0.1, -0.1],
+            '東大阪': [0.1, 0.0],
+            '枚方': [0.05, 0.1],
+            '豊中': [0.0, 0.05],
+            '吹田': [-0.05, 0.05],
+            '高槻': [-0.1, 0.1]
+        },
+        '愛知県': {
+            '名古屋': [0.0, 0.0],
+            '豊田': [-0.1, -0.1],
+            '岡崎': [-0.2, -0.1],
+            '一宮': [-0.1, 0.1],
+            '豊橋': [0.3, -0.2],
+            '春日井': [0.05, 0.05],
+            '安城': [-0.15, -0.05]
+        },
+        '福岡県': {
+            '福岡': [0.0, 0.0],
+            '北九州': [0.2, 0.1],
+            '久留米': [-0.1, -0.1],
+            '大牟田': [-0.2, -0.2],
+            '飯塚': [0.1, 0.0],
+            '直方': [0.05, 0.05],
+            '田川': [0.15, 0.05]
+        }
+        // 他の都道府県の主要都市も必要に応じて追加
+    }
+    
+    const prefOffsets = cityOffsetMap[prefecture]
+    if (!prefOffsets) {
+        return null
+    }
+    
+    // 部分マッチングで市町村名を検索
+    for (const [cityName, offset] of Object.entries(prefOffsets)) {
+        if (address.includes(cityName)) {
+            return offset
+        }
+    }
+    
     return null
 }

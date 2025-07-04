@@ -63,6 +63,15 @@ interface AreaInfo {
     areas: {
         [key: string]: [number, number][]
     }
+    // 市町村レベルの詳細情報を追加
+    detailedAreas?: { 
+        [intensity: string]: Array<{
+            prefecture: string
+            city: string
+            coordinates: [number, number]
+            fullAddress: string
+        }>
+    }
 }
 
 export async function generateEarthquakeMap(earthquakeData: EarthquakeData, areaInfo?: AreaInfo): Promise<string> {
@@ -303,7 +312,59 @@ export async function generateEarthquakeMap(earthquakeData: EarthquakeData, area
             .style('shape-rendering', 'geometricPrecision')
         
         // Second pass: Color regions by intensity if data is available
-        if (data.features) {
+        if (data.features && area_info && area_info.detailedAreas) {
+            console.log('🎨 市町村レベル震度分布描画開始')
+            
+            // 震度文字列をconfig色キーに変換するマッピング
+            const intensityToColorKey: { [key: string]: string } = {
+                '1': '1',
+                '2': '2',
+                '3': '3',
+                '4': '4',
+                '5弱': 'under_5',
+                '5強': 'over_5',
+                '6弱': 'under_6',
+                '6強': 'over_6',
+                '7': '7'
+            }
+            
+            // 市町村レベルで震度円を描画
+            Object.entries(area_info.detailedAreas).forEach(([intensityLevel, locations]) => {
+                const colorKey = intensityToColorKey[intensityLevel] || intensityLevel
+                const color = seismic_intensity_color[colorKey]
+                
+                if (color) {
+                    console.log(`震度${intensityLevel}地域を${color}で描画: ${locations.length}箇所`)
+                    
+                    locations.forEach((location, index) => {
+                        const coordinate = aProjection(location.coordinates)
+                        if (coordinate) {
+                            // 各市町村地点に震度色の円を描画
+                            const circleRadius = Math.max(3, Math.min(8, 12 - parseInt(intensityLevel.charAt(0)) || 5))
+                            
+                            svg.append('circle')
+                                .attr('cx', coordinate[0])
+                                .attr('cy', coordinate[1])
+                                .attr('r', circleRadius)
+                                .style('fill', color)
+                                .style('fill-opacity', 0.8)
+                                .style('stroke', '#000')
+                                .style('stroke-width', '1')
+                                .style('stroke-opacity', 0.6)
+                            
+                            // 詳細ログ（最初の数個のみ）
+                            if (index < 3) {
+                                console.log(`  ${location.fullAddress}: [${coordinate[0]}, ${coordinate[1]}] r=${circleRadius}`)
+                            }
+                        } else {
+                            console.warn(`投影座標が取得できません: ${location.fullAddress} [${location.coordinates[0]}, ${location.coordinates[1]}]`)
+                        }
+                    })
+                }
+            })
+        } else if (data.features) {
+            console.log('🎨 都道府県レベル震度分布描画（フォールバック）')
+            // 従来の都道府県レベル描画をフォールバックとして保持
             // 都道府県名と震度のマッピングを作成
             const prefectureIntensityMap: { [key: string]: string } = {}
             
