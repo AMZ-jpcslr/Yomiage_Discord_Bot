@@ -328,7 +328,7 @@ export async function generateEarthquakeMap(earthquakeData: EarthquakeData, area
                 '7': '7'
             }
             
-            // 市町村レベルで震度円を描画
+            // 市町村レベルで震度円を描画（震度数字付き）
             Object.entries(area_info.detailedAreas).forEach(([intensityLevel, locations]) => {
                 const colorKey = intensityToColorKey[intensityLevel] || intensityLevel
                 const color = seismic_intensity_color[colorKey]
@@ -339,22 +339,44 @@ export async function generateEarthquakeMap(earthquakeData: EarthquakeData, area
                     locations.forEach((location, index) => {
                         const coordinate = aProjection(location.coordinates)
                         if (coordinate) {
-                            // 各市町村地点に震度色の円を描画
-                            const circleRadius = Math.max(3, Math.min(8, 12 - parseInt(intensityLevel.charAt(0)) || 5))
+                            // 震度レベルに応じた円のサイズを計算
+                            const baseRadius = 12
+                            const intensityNum = parseInt(intensityLevel.charAt(0)) || 1
+                            const circleRadius = Math.max(6, Math.min(20, baseRadius + intensityNum * 2))
                             
+                            // 市町村地点に震度色の円を描画
                             svg.append('circle')
                                 .attr('cx', coordinate[0])
                                 .attr('cy', coordinate[1])
                                 .attr('r', circleRadius)
                                 .style('fill', color)
-                                .style('fill-opacity', 0.8)
+                                .style('fill-opacity', 0.85)
                                 .style('stroke', '#000')
+                                .style('stroke-width', '2')
+                                .style('stroke-opacity', 0.9)
+                                .style('filter', 'drop-shadow(2px 2px 4px rgba(0,0,0,0.5))')
+                            
+                            // 震度数字を円の中央に表示
+                            const displayText = intensityLevel.replace('弱', '-').replace('強', '+')
+                            const fontSize = Math.max(8, Math.min(16, circleRadius * 0.8))
+                            
+                            svg.append('text')
+                                .attr('x', coordinate[0])
+                                .attr('y', coordinate[1] + fontSize * 0.3)
+                                .attr('text-anchor', 'middle')
+                                .attr('dominant-baseline', 'middle')
+                                .style('font-family', 'Arial, sans-serif')
+                                .style('font-size', `${fontSize}px`)
+                                .style('font-weight', 'bold')
+                                .style('fill', '#ffffff')
+                                .style('stroke', '#000000')
                                 .style('stroke-width', '1')
-                                .style('stroke-opacity', 0.6)
+                                .style('paint-order', 'stroke')
+                                .text(displayText)
                             
                             // 詳細ログ（最初の数個のみ）
                             if (index < 3) {
-                                console.log(`  ${location.fullAddress}: [${coordinate[0]}, ${coordinate[1]}] r=${circleRadius}`)
+                                console.log(`  ${location.fullAddress}: [${coordinate[0]}, ${coordinate[1]}] 震度${intensityLevel} r=${circleRadius}`)
                             }
                         } else {
                             console.warn(`投影座標が取得できません: ${location.fullAddress} [${location.coordinates[0]}, ${location.coordinates[1]}]`)

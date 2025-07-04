@@ -31,7 +31,7 @@ const client = new Client({
 
 // ステータスメッセージのバリエーション
 const statusMessages = [
-    'P2P地震速報API地震使用',
+    'P2P地震速報API使用',
     'キヴォトスで業務中',
     '地震情報配信中',
 ]
