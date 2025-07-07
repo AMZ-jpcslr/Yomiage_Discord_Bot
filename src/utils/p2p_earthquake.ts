@@ -227,6 +227,10 @@ export function convertP2PDataToMapData(p2pData: P2PQuakeData): { earthquakeData
     
     if (p2pData.points) {
         console.log(`📍 処理する震度観測点数: ${p2pData.points.length}`)
+        console.log(`📍 サンプル観測点データ:`)
+        p2pData.points.slice(0, 3).forEach((point, idx) => {
+            console.log(`  ${idx + 1}. ${point.pref} ${point.addr} - 震度コード${point.scale} → ${scaleCodeToString(point.scale)}`)
+        })
         
         for (const point of p2pData.points) {
             const intensityKey = scaleCodeToString(point.scale)
@@ -269,6 +273,8 @@ export function convertP2PDataToMapData(p2pData: P2PQuakeData): { earthquakeData
                     })
                     
                     console.log(`  震度${intensityKey}: ${prefName} ${fullAddress} → [${coords[0].toFixed(3)}, ${coords[1].toFixed(3)}] (都道府県レベル)`)
+                } else {
+                    console.warn(`  ⚠️ 座標推定失敗: ${prefName} ${fullAddress}`)
                 }
             }
             
@@ -278,6 +284,8 @@ export function convertP2PDataToMapData(p2pData: P2PQuakeData): { earthquakeData
                 prefectureIntensityMap[prefName] = intensityKey
             }
         }
+    } else {
+        console.warn('⚠️ P2P地震情報に震度観測点データがありません')
     }
     
     const areaInfo: AreaInfo = { 

@@ -280,6 +280,18 @@ export async function generateEarthquakeMap(earthquakeData: EarthquakeData, area
             console.warn('⚠️ 震源地が投影範囲外にあります。これが位置ずれの原因の可能性があります。')
         }
         
+        // 投影関数のテスト
+        const testCoords: [number, number][] = [
+            [139.69, 35.69], // 東京
+            [135.52, 34.69], // 大阪
+            [140.47, 37.75]  // 福島
+        ]
+        console.log('=== 投影関数テスト ===')
+        testCoords.forEach(coord => {
+            const projected = aProjection(coord)
+            console.log(`テスト座標[${coord[0]}, ${coord[1]}] → 投影座標[${projected ? projected[0].toFixed(1) + ', ' + projected[1].toFixed(1) : 'null'}]`)
+        })
+        
         const geoPath = d3.geoPath()
             .projection(aProjection)
         
@@ -314,6 +326,7 @@ export async function generateEarthquakeMap(earthquakeData: EarthquakeData, area
         // Second pass: Color regions by intensity if data is available
         if (data.features && area_info && area_info.detailedAreas) {
             console.log('🎨 市町村レベル震度分布描画開始')
+            console.log('利用可能な震度データ:', Object.keys(area_info.detailedAreas))
             
             // 震度文字列をconfig色キーに変換するマッピング
             const intensityToColorKey: { [key: string]: string } = {
@@ -328,29 +341,42 @@ export async function generateEarthquakeMap(earthquakeData: EarthquakeData, area
                 '7': '7'
             }
             
+            let totalDrawnCircles = 0
+            
             // 市町村レベルで震度円を描画（震度数字付き）
             Object.entries(area_info.detailedAreas).forEach(([intensityLevel, locations]) => {
                 const colorKey = intensityToColorKey[intensityLevel] || intensityLevel
-                const color = seismic_intensity_color[colorKey]
+                const color = seismic_intensity_color[colorKey] || '#cccccc'
                 
-                if (color) {
-                    console.log(`震度${intensityLevel}地域を${color}で描画: ${locations.length}箇所`)
+                console.log(`震度${intensityLevel}地域を${color}で描画: ${locations.length}箇所`)
+                
+                locations.forEach((location, index) => {
+                    const coordinates = location.coordinates
+                    if (!coordinates || coordinates.length !== 2) {
+                        console.warn(`無効な座標データ: ${location.fullAddress}`, coordinates)
+                        return
+                    }
                     
-                    locations.forEach((location, index) => {
-                        const coordinate = aProjection(location.coordinates)
-                        if (coordinate) {
+                    const projectedCoord = aProjection(coordinates)
+                    console.log(`投影テスト: 元座標[${coordinates[0]}, ${coordinates[1]}] → 投影座標[${projectedCoord ? projectedCoord[0].toFixed(1) + ', ' + projectedCoord[1].toFixed(1) : 'null'}]`)
+                    
+                    if (projectedCoord && projectedCoord.length === 2) {
+                        const [x, y] = projectedCoord
+                        
+                        // 描画範囲内チェック
+                        if (x >= 0 && x <= config.width && y >= 0 && y <= config.height) {
                             // 震度レベルに応じた円のサイズを計算
-                            const baseRadius = 12
                             const intensityNum = parseInt(intensityLevel.charAt(0)) || 1
-                            const circleRadius = Math.max(6, Math.min(20, baseRadius + intensityNum * 2))
+                            const baseRadius = 15
+                            const circleRadius = Math.max(8, Math.min(25, baseRadius + intensityNum * 1.5))
                             
                             // 市町村地点に震度色の円を描画
                             svg.append('circle')
-                                .attr('cx', coordinate[0])
-                                .attr('cy', coordinate[1])
+                                .attr('cx', x)
+                                .attr('cy', y)
                                 .attr('r', circleRadius)
                                 .style('fill', color)
-                                .style('fill-opacity', 0.85)
+                                .style('fill-opacity', 0.8)
                                 .style('stroke', '#000')
                                 .style('stroke-width', '2')
                                 .style('stroke-opacity', 0.9)
@@ -358,11 +384,11 @@ export async function generateEarthquakeMap(earthquakeData: EarthquakeData, area
                             
                             // 震度数字を円の中央に表示
                             const displayText = intensityLevel.replace('弱', '-').replace('強', '+')
-                            const fontSize = Math.max(8, Math.min(16, circleRadius * 0.8))
+                            const fontSize = Math.max(10, Math.min(18, circleRadius * 0.7))
                             
                             svg.append('text')
-                                .attr('x', coordinate[0])
-                                .attr('y', coordinate[1] + fontSize * 0.3)
+                                .attr('x', x)
+                                .attr('y', y + fontSize * 0.3)
                                 .attr('text-anchor', 'middle')
                                 .attr('dominant-baseline', 'middle')
                                 .style('font-family', 'Arial, sans-serif')
@@ -374,17 +400,24 @@ export async function generateEarthquakeMap(earthquakeData: EarthquakeData, area
                                 .style('paint-order', 'stroke')
                                 .text(displayText)
                             
+                            totalDrawnCircles++
+                            
                             // 詳細ログ（最初の数個のみ）
-                            if (index < 3) {
-                                console.log(`  ${location.fullAddress}: [${coordinate[0]}, ${coordinate[1]}] 震度${intensityLevel} r=${circleRadius}`)
+                            if (index < 2) {
+                                console.log(`  ✓ ${location.fullAddress}: 投影座標[${x.toFixed(1)}, ${y.toFixed(1)}] 震度${intensityLevel} 半径${circleRadius}`)
                             }
                         } else {
-                            console.warn(`投影座標が取得できません: ${location.fullAddress} [${location.coordinates[0]}, ${location.coordinates[1]}]`)
+                            console.warn(`描画範囲外: ${location.fullAddress} 投影座標[${x}, ${y}] 範囲[0-${config.width}, 0-${config.height}]`)
                         }
-                    })
-                }
+                    } else {
+                        console.warn(`投影座標が取得できません: ${location.fullAddress} 元座標[${coordinates[0]}, ${coordinates[1]}]`)
+                    }
+                })
             })
-        } else if (data.features) {
+            
+            console.log(`🎨 市町村レベル震度分布描画完了: ${totalDrawnCircles}個の円を描画`)
+            
+        } else if (data.features && area_info && area_info.areas) {
             console.log('🎨 都道府県レベル震度分布描画（フォールバック）')
             // 従来の都道府県レベル描画をフォールバックとして保持
             // 都道府県名と震度のマッピングを作成
