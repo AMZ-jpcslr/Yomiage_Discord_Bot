@@ -329,6 +329,19 @@ export async function generateEarthquakeMap(earthquakeData: EarthquakeData, area
             console.log('🎨 市町村レベル震度分布描画開始')
             console.log('利用可能な震度データ:', Object.keys(area_info.detailedAreas))
             
+            // 震度文字列をconfig色キーに変換するマッピング（最初に宣言）
+            const intensityToColorKey: { [key: string]: string } = {
+                '1': '1',
+                '2': '2',
+                '3': '3',
+                '4': '4',
+                '5弱': 'under_5',
+                '5強': 'over_5',
+                '6弱': 'under_6',
+                '6強': 'over_6',
+                '7': '7'
+            }
+            
             // 市町村境界の色付けマッピング
             const municipalityIntensityMap: { [key: string]: string } = {}
             
@@ -367,19 +380,6 @@ export async function generateEarthquakeMap(earthquakeData: EarthquakeData, area
                         }
                     }
                 })
-            }
-            
-            // 震度文字列をconfig色キーに変換するマッピング
-            const intensityToColorKey: { [key: string]: string } = {
-                '1': '1',
-                '2': '2',
-                '3': '3',
-                '4': '4',
-                '5弱': 'under_5',
-                '5強': 'over_5',
-                '6弱': 'under_6',
-                '6強': 'over_6',
-                '7': '7'
             }
             
             let totalDrawnCircles = 0
