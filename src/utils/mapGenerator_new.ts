@@ -8,6 +8,7 @@ import * as fs from 'fs'
 import * as path from 'path'
 import { JSDOM } from 'jsdom'
 import sharp from 'sharp'
+import { scaleStringToCode } from './p2p_earthquake'
 
 // simplify-geojson can be imported normally (CommonJS)
 // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -328,6 +329,46 @@ export async function generateEarthquakeMap(earthquakeData: EarthquakeData, area
             console.log('🎨 市町村レベル震度分布描画開始')
             console.log('利用可能な震度データ:', Object.keys(area_info.detailedAreas))
             
+            // 市町村境界の色付けマッピング
+            const municipalityIntensityMap: { [key: string]: string } = {}
+            
+            // 市町村レベルの震度データから境界色付け用のマッピングを作成
+            Object.entries(area_info.detailedAreas).forEach(([intensityLevel, locations]) => {
+                locations.forEach(location => {
+                    const key = `${location.prefecture}_${location.city.replace(/[市区町村]/g, '')}`
+                    const colorKey = intensityToColorKey[intensityLevel] || intensityLevel
+                    if (!municipalityIntensityMap[key] || 
+                        scaleStringToCode(intensityLevel) > scaleStringToCode(municipalityIntensityMap[key])) {
+                        municipalityIntensityMap[key] = colorKey
+                    }
+                })
+            })
+            
+            // 市町村境界を震度に応じて色付け
+            if (data.features) {
+                data.features.forEach((feature: GeoJSON.Feature) => {
+                    const prefName = feature.properties?.N03_001 || feature.properties?.pref_name
+                    const cityName = feature.properties?.N03_003 || feature.properties?.N03_004 || feature.properties?.city_name
+                    
+                    if (prefName && cityName) {
+                        const key = `${prefName}_${cityName.replace(/[市区町村]/g, '')}`
+                        const colorKey = municipalityIntensityMap[key]
+                        
+                        if (colorKey && seismic_intensity_color[colorKey]) {
+                            console.log(`市町村境界を色付け: ${prefName} ${cityName} → 震度${colorKey} → ${seismic_intensity_color[colorKey]}`)
+                            svg.append('path')
+                                .datum(feature)
+                                .attr('d', geoPath)
+                                .attr('stroke-width', map_stroke)
+                                .style('fill', seismic_intensity_color[colorKey])
+                                .style('fill-opacity', 0.6)
+                                .style('stroke', stroke_color)
+                                .style('stroke-width', '0.5')
+                        }
+                    }
+                })
+            }
+            
             // 震度文字列をconfig色キーに変換するマッピング
             const intensityToColorKey: { [key: string]: string } = {
                 '1': '1',
@@ -370,37 +411,81 @@ export async function generateEarthquakeMap(earthquakeData: EarthquakeData, area
                             const baseRadius = 15
                             const circleRadius = Math.max(8, Math.min(25, baseRadius + intensityNum * 1.5))
                             
-                            // 市町村地点に震度色の円を描画
+                            // 市町村地点に震度色の円を描画（視認性向上版）
                             svg.append('circle')
                                 .attr('cx', x)
                                 .attr('cy', y)
                                 .attr('r', circleRadius)
                                 .style('fill', color)
-                                .style('fill-opacity', 0.8)
+                                .style('fill-opacity', 0.9)
                                 .style('stroke', '#000')
-                                .style('stroke-width', '2')
-                                .style('stroke-opacity', 0.9)
-                                .style('filter', 'drop-shadow(2px 2px 4px rgba(0,0,0,0.5))')
+                                .style('stroke-width', '2.5')
+                                .style('stroke-opacity', 1.0)
+                                .style('filter', 'drop-shadow(3px 3px 6px rgba(0,0,0,0.7))')
                             
-                            // 震度数字を円の中央に表示
+                            // 震度数字を円の中央に表示（より鮮明に）
                             const displayText = intensityLevel.replace('弱', '-').replace('強', '+')
-                            const fontSize = Math.max(10, Math.min(18, circleRadius * 0.7))
+                            const fontSize = Math.max(11, Math.min(20, circleRadius * 0.8))
                             
+                            // 背景となる白い輪郭を追加（視認性向上）
                             svg.append('text')
                                 .attr('x', x)
-                                .attr('y', y + fontSize * 0.3)
+                                .attr('y', y + fontSize * 0.35)
                                 .attr('text-anchor', 'middle')
                                 .attr('dominant-baseline', 'middle')
-                                .style('font-family', 'Arial, sans-serif')
+                                .style('font-family', 'Arial Black, Arial, sans-serif')
                                 .style('font-size', `${fontSize}px`)
-                                .style('font-weight', 'bold')
+                                .style('font-weight', '900')
                                 .style('fill', '#ffffff')
-                                .style('stroke', '#000000')
-                                .style('stroke-width', '1')
+                                .style('stroke', '#ffffff')
+                                .style('stroke-width', '3')
                                 .style('paint-order', 'stroke')
                                 .text(displayText)
                             
+                            // メインの震度数字（黒色）
+                            svg.append('text')
+                                .attr('x', x)
+                                .attr('y', y + fontSize * 0.35)
+                                .attr('text-anchor', 'middle')
+                                .attr('dominant-baseline', 'middle')
+                                .style('font-family', 'Arial Black, Arial, sans-serif')
+                                .style('font-size', `${fontSize}px`)
+                                .style('font-weight', '900')
+                                .style('fill', '#000000')
+                                .text(displayText)
+                            
                             totalDrawnCircles++
+                            
+                            // 島や離島の特別処理
+                            if (location.fullAddress.includes('島') || 
+                                location.fullAddress.includes('列島') ||
+                                location.fullAddress.includes('諸島')) {
+                                console.log(`🏝️ 島地域検出: ${location.fullAddress}`)
+                                
+                                // 島地域用の特別なマーカーを追加
+                                svg.append('rect')
+                                    .attr('x', x - 3)
+                                    .attr('y', y - circleRadius - 8)
+                                    .attr('width', 6)
+                                    .attr('height', 4)
+                                    .style('fill', '#0066cc')
+                                    .style('stroke', '#ffffff')
+                                    .style('stroke-width', '1')
+                                
+                                // 島マーカーのテキスト
+                                svg.append('text')
+                                    .attr('x', x + circleRadius + 5)
+                                    .attr('y', y - circleRadius)
+                                    .attr('text-anchor', 'start')
+                                    .style('font-family', 'Arial, sans-serif')
+                                    .style('font-size', '10px')
+                                    .style('font-weight', 'bold')
+                                    .style('fill', '#0066cc')
+                                    .style('stroke', '#ffffff')
+                                    .style('stroke-width', '2')
+                                    .style('paint-order', 'stroke')
+                                    .text('島')
+                            }
                             
                             // 詳細ログ（最初の数個のみ）
                             if (index < 2) {
