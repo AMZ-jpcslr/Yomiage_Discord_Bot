@@ -580,8 +580,9 @@ export async function generateEarthquakeMap(earthquakeData: EarthquakeData, area
             // 震度数字を円の中央に表示
             svg.append('text')
                 .attr('x', coordinate[0])
-                .attr('y', coordinate[1] + 2) // わずかに下にずらす
+                .attr('y', coordinate[1])
                 .attr('text-anchor', 'middle')
+                .attr('dominant-baseline', 'central')
                 .style('font-family', seismic_intensity_config.font)
                 .style('font-size', `${seismic_intensity_config.fontsize}px`)
                 .style('font-weight', 'bold')
