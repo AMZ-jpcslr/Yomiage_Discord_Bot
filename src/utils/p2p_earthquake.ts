@@ -315,7 +315,7 @@ export function convertP2PDataToMapData(p2pData: P2PQuakeData): { earthquakeData
 /**
  * P2P地震情報からDiscord埋め込みを作成（不完全データ対応）
  */
-export function createP2PEarthquakeEmbed(p2pData: P2PQuakeData): EmbedBuilder {
+export function createP2PEarthquakeEmbed(p2pData: P2PQuakeData, options?: { includeMapImage?: boolean }): EmbedBuilder {
     console.log('📝 P2P情報埋め込み作成中...')
     
     const codeDescription = P2P_CODES[p2pData.code as keyof typeof P2P_CODES] || `コード${p2pData.code}`
@@ -499,6 +499,15 @@ export function createP2PEarthquakeEmbed(p2pData: P2PQuakeData): EmbedBuilder {
     embed.setFooter({
         text: `${p2pData.issue.source} | P2P地震情報 | ID: ${p2pData.id}`
     })
+    
+    // 地図画像設定（オプション）
+    if (options?.includeMapImage && 
+        (p2pData.code === 551 || p2pData.code === 552) && 
+        p2pData.earthquake?.hypocenter?.longitude && 
+        p2pData.earthquake?.hypocenter?.latitude) {
+        // attachment://earthquake_map.png または attachment://earthquake_intensity_map.png を設定
+        // この設定は呼び出し元で地図を生成してから行う
+    }
     
     console.log('✅ P2P情報埋め込み作成完了')
     return embed

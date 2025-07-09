@@ -361,7 +361,10 @@ async function sendP2PNotification(client: Client, p2pData: P2PQuakeData, isInco
                 if (mapImagePath) {
                     const attachment = new AttachmentBuilder(mapImagePath, { name: 'earthquake_map.png' })
                     files.push(attachment)
-                    console.log('🗾 地震マップ生成成功')
+                    
+                    // 地図画像を埋め込みの画像として設定
+                    embed.setImage('attachment://earthquake_map.png')
+                    console.log('🗾 地震マップ生成成功（埋め込み画像として設定）')
                 }
             }
         } catch (mapError) {

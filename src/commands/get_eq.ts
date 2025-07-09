@@ -114,7 +114,10 @@ export async function execute(interaction: ChatInputCommandInteraction) {
                 if (mapImagePath) {
                     const attachment = new AttachmentBuilder(mapImagePath, { name: 'earthquake_intensity_map.png' })
                     files.push(attachment)
-                    console.log('✅ 震度分布地震マップ生成成功:', mapImagePath)
+                    
+                    // 地図画像を埋め込みの画像として設定
+                    embed.setImage('attachment://earthquake_intensity_map.png')
+                    console.log('✅ 震度分布地震マップ生成成功（埋め込み画像として設定）:', mapImagePath)
                     
                     // 震度分布の詳細をログ出力
                     if (mapData.areaInfo.areas) {
