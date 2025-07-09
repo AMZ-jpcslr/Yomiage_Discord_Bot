@@ -5,6 +5,7 @@
 import { SlashCommandBuilder, ChatInputCommandInteraction } from 'discord.js'
 import { fetchP2PQuakeData, convertP2PDataToMapData, createP2PEarthquakeEmbed } from '../utils/p2p_earthquake'
 import { generateEarthquakeMap } from '../utils/mapGenerator_new'
+import { getIntensityIconPath } from '../utils/intensityIcon'
 import { AttachmentBuilder } from 'discord.js'
 
 export const data = new SlashCommandBuilder()
@@ -104,6 +105,31 @@ export async function execute(interaction: ChatInputCommandInteraction) {
         const mapData = convertP2PDataToMapData(latestEarthquake)
         
         const files: AttachmentBuilder[] = []
+        
+        // 震度アイコンをembedに追加
+        const maxScale = latestEarthquake.earthquake?.maxScale
+        if (maxScale && maxScale !== 0) {
+            // P2P震度コードから震度文字列に変換
+            const scaleStr = maxScale >= 70 ? '7' :
+                           maxScale >= 60 ? '6+' :
+                           maxScale >= 55 ? '6-' :
+                           maxScale >= 50 ? '5+' :
+                           maxScale >= 45 ? '5-' :
+                           maxScale >= 40 ? '4' :
+                           maxScale >= 30 ? '3' :
+                           maxScale >= 20 ? '2' :
+                           maxScale >= 10 ? '1' : null
+            
+            if (scaleStr) {
+                const intensityIconPath = getIntensityIconPath(scaleStr)
+                if (intensityIconPath) {
+                    const iconAttachment = new AttachmentBuilder(intensityIconPath, { name: 'intensity_icon.png' })
+                    files.push(iconAttachment)
+                    embed.setThumbnail('attachment://intensity_icon.png')
+                    console.log(`✅ 震度アイコン追加: 震度${scaleStr}`)
+                }
+            }
+        }
         
         if (mapData) {
             try {

@@ -754,51 +754,15 @@ export async function generateEarthquakeMap(earthquakeData: EarthquakeData, area
         const filepath = path.join(outputDir, filename)
         
         // Convert SVG to PNG with proper text rendering
-        let baseImage = await sharp(Buffer.from(svgWithEncoding, 'utf8'))
+        const baseImage = await sharp(Buffer.from(svgWithEncoding, 'utf8'))
             .png({
                 quality: 95,
                 progressive: true
             })
             .toBuffer()
         
-        // 震度アイコンを右上に合成
-        const maxScale = earthquakeData.maxScale
-        console.log(`震度アイコン合成: maxScale = "${maxScale}"`)
-        
-        if (maxScale && maxScale !== '不明') {
-            const intensityIconPath = getIntensityIconPath(maxScale)
-            if (intensityIconPath && fs.existsSync(intensityIconPath)) {
-                try {
-                    console.log(`震度アイコンを右上に合成: ${intensityIconPath}`)
-                    
-                    // アイコンのサイズを取得
-                    const iconBuffer = fs.readFileSync(intensityIconPath)
-                    const iconImage = sharp(iconBuffer)
-                    const { width: iconWidth } = await iconImage.metadata()
-                    
-                    // 右上の位置を計算（マージン20px）
-                    const margin = 20
-                    const left = width - (iconWidth || 64) - margin
-                    const top = margin
-                    
-                    // 震度アイコンを合成
-                    baseImage = await sharp(baseImage)
-                        .composite([{
-                            input: iconBuffer,
-                            left: left,
-                            top: top
-                        }])
-                        .png()
-                        .toBuffer()
-                    
-                    console.log(`✅ 震度アイコン合成完了: 位置[${left}, ${top}]`)
-                } catch (iconError) {
-                    console.error('❌ 震度アイコン合成エラー:', iconError)
-                }
-            } else {
-                console.log(`⚠️ 震度アイコンが見つからない: ${intensityIconPath}`)
-            }
-        }
+        // 震度アイコンは地図ではなくDiscord embedに表示するため、ここでは合成しない
+        console.log(`地震マップ生成完了: 震度アイコンはembedに表示予定`)
         
         // 最終画像を保存
         await sharp(baseImage).toFile(filepath)
@@ -1514,35 +1478,3 @@ const PREFECTURE_COORDINATES: { [key: string]: [number, number] } = {
     '沖縄県': [127.6792, 26.2124]
 }
 
-/**
- * 震度から対応するアイコンファイルのパスを取得
- */
-function getIntensityIconPath(intensityScale: string): string | null {
-    const projectRoot = process.cwd()
-    const iconDir = path.join(projectRoot, 'data', 'intensity_icons')
-    
-    // 震度文字列をファイル名にマッピング
-    const intensityFileMap: { [key: string]: string } = {
-        '1': 'intensity_1.png',
-        '2': 'intensity_2.png',
-        '3': 'intensity_3.png',
-        '4': 'intensity_4.png',
-        '5-': 'intensity_5-.png',
-        'under_5': 'intensity_5-.png',
-        '5+': 'intensity_5+.png',
-        'over_5': 'intensity_5+.png',
-        '6-': 'intensity_6-.png',
-        'under_6': 'intensity_6-.png',
-        '6+': 'intensity_6+.png',
-        'over_6': 'intensity_6+.png',
-        '7': 'intensity_7.png'
-    }
-    
-    const filename = intensityFileMap[intensityScale]
-    if (filename) {
-        return path.join(iconDir, filename)
-    }
-    
-    console.warn(`未対応の震度: ${intensityScale}`)
-    return null
-}

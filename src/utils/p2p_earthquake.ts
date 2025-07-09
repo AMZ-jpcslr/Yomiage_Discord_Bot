@@ -814,20 +814,48 @@ function getObservationStationCoordinates(
     }
     
     // トカラ列島近海の特別処理
-    if (stationName.includes('トカラ') || stationName.includes('悪石島') || stationName.includes('中之島') || 
-        stationName.includes('諏訪之瀬島') || stationName.includes('口之島') || stationName.includes('平島') ||
-        stationName.includes('小宝島') || stationName.includes('宝島')) {
-        // トカラ列島の島名から座標を特定
-        for (const [name, coords] of Object.entries(prefStations)) {
-            if (stationName.includes(name) || name.includes(stationName.replace('鹿児島県', '').replace('十島村', ''))) {
-                console.log(`トカラ列島観測地点座標: ${stationName} → ${name}`)
-                return coords
+    if (prefecture === '鹿児島県') {
+        // 十島村の各島の詳細マッピング
+        const tokaraMapping: { [key: string]: string } = {
+            '十島村口之島': '口之島',
+            '十島村中之島': '中之島',
+            '十島村諏訪之瀬島': '諏訪之瀬島',
+            '十島村平島': '平島',
+            '十島村悪石島': '悪石島',
+            '十島村小宝島': '小宝島',
+            '十島村宝島': '宝島',
+            '口之島': '口之島',
+            '中之島': '中之島',
+            '諏訪之瀬島': '諏訪之瀬島',
+            '平島': '平島',
+            '悪石島': '悪石島',
+            '小宝島': '小宝島',
+            '宝島': '宝島'
+        }
+        
+        // 十島村の島名を直接マッピング
+        for (const [pattern, island] of Object.entries(tokaraMapping)) {
+            if (stationName.includes(pattern) && prefStations[island]) {
+                console.log(`トカラ列島観測地点座標: ${stationName} → ${island}`)
+                return prefStations[island]
             }
         }
-        // 悪石島をデフォルトとして使用（トカラ列島の中央付近）
-        if (prefStations['悪石島']) {
-            console.log(`トカラ列島観測地点座標: ${stationName} → 悪石島 (デフォルト)`)
-            return prefStations['悪石島']
+        
+        // トカラ列島関連キーワードでの検索
+        if (stationName.includes('トカラ') || stationName.includes('十島')) {
+            // 含まれる島名を検索
+            for (const [island, coords] of Object.entries(prefStations)) {
+                if (stationName.includes(island)) {
+                    console.log(`トカラ列島観測地点座標: ${stationName} → ${island} (キーワード一致)`)
+                    return coords
+                }
+            }
+            
+            // デフォルトとして中之島（トカラ列島の中央）を使用
+            if (prefStations['中之島']) {
+                console.log(`トカラ列島観測地点座標: ${stationName} → 中之島 (デフォルト)`)
+                return prefStations['中之島']
+            }
         }
     }
     

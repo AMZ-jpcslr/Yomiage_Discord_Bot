@@ -5,6 +5,7 @@
 import { Client, TextChannel, EmbedBuilder, AttachmentBuilder } from 'discord.js'
 import { fetchAllP2PData, convertP2PDataToMapData, createP2PEarthquakeEmbed, P2PQuakeData, P2P_CODES } from './utils/p2p_earthquake'
 import { generateEarthquakeMap } from './utils/mapGenerator_new'
+import { getIntensityIconPath } from './utils/intensityIcon'
 import * as fs from 'fs'
 import * as path from 'path'
 
@@ -347,6 +348,35 @@ async function sendP2PNotification(client: Client, p2pData: P2PQuakeData, isInco
     }
     
     const files: AttachmentBuilder[] = []
+    
+    // 震度アイコンをembedに追加（地震情報の場合のみ）
+    if ((p2pData.code === 551 || p2pData.code === 552) && 
+        p2pData.earthquake?.maxScale && 
+        p2pData.earthquake.maxScale > 0 && 
+        !isIncomplete) {
+        
+        // P2P震度コードから震度文字列に変換
+        const maxScale = p2pData.earthquake.maxScale
+        const scaleStr = maxScale >= 70 ? '7' :
+                       maxScale >= 60 ? '6+' :
+                       maxScale >= 55 ? '6-' :
+                       maxScale >= 50 ? '5+' :
+                       maxScale >= 45 ? '5-' :
+                       maxScale >= 40 ? '4' :
+                       maxScale >= 30 ? '3' :
+                       maxScale >= 20 ? '2' :
+                       maxScale >= 10 ? '1' : null
+        
+        if (scaleStr) {
+            const intensityIconPath = getIntensityIconPath(scaleStr)
+            if (intensityIconPath) {
+                const iconAttachment = new AttachmentBuilder(intensityIconPath, { name: 'intensity_icon.png' })
+                files.push(iconAttachment)
+                embed.setThumbnail('attachment://intensity_icon.png')
+                console.log(`✅ 震度アイコン追加: 震度${scaleStr}`)
+            }
+        }
+    }
     
     // 地震情報で震源地がある場合は地図を生成
     if ((p2pData.code === 551 || p2pData.code === 552) && 
