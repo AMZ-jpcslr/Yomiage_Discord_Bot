@@ -585,9 +585,9 @@ export async function generateEarthquakeMap(earthquakeData: EarthquakeData, area
                 .style('font-family', seismic_intensity_config.font)
                 .style('font-size', `${seismic_intensity_config.fontsize}px`)
                 .style('font-weight', 'bold')
-                .style('fill', '#000000')
-                .style('stroke', '#ffffff')
-                .style('stroke-width', '1')
+                .style('fill', '#ffffff')
+                .style('stroke', '#000000')
+                .style('stroke-width', '2')
                 .style('paint-order', 'stroke fill')
                 .text(text)
             
