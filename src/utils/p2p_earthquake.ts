@@ -813,6 +813,24 @@ function getObservationStationCoordinates(
         return prefStations[stationName]
     }
     
+    // トカラ列島近海の特別処理
+    if (stationName.includes('トカラ') || stationName.includes('悪石島') || stationName.includes('中之島') || 
+        stationName.includes('諏訪之瀬島') || stationName.includes('口之島') || stationName.includes('平島') ||
+        stationName.includes('小宝島') || stationName.includes('宝島')) {
+        // トカラ列島の島名から座標を特定
+        for (const [name, coords] of Object.entries(prefStations)) {
+            if (stationName.includes(name) || name.includes(stationName.replace('鹿児島県', '').replace('十島村', ''))) {
+                console.log(`トカラ列島観測地点座標: ${stationName} → ${name}`)
+                return coords
+            }
+        }
+        // 悪石島をデフォルトとして使用（トカラ列島の中央付近）
+        if (prefStations['悪石島']) {
+            console.log(`トカラ列島観測地点座標: ${stationName} → 悪石島 (デフォルト)`)
+            return prefStations['悪石島']
+        }
+    }
+    
     // 部分一致を試行（観測地点名が市区町村名を含む場合）
     for (const [name, coords] of Object.entries(prefStations)) {
         if (stationName.includes(name) || name.includes(stationName)) {
