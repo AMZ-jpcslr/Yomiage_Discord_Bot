@@ -3,6 +3,8 @@
  */
 
 import { EmbedBuilder } from 'discord.js'
+import * as fs from 'fs'
+import * as path from 'path'
 
 // マップ生成用データ型
 interface EarthquakeMapData {
@@ -232,6 +234,9 @@ export function convertP2PDataToMapData(p2pData: P2PQuakeData): { earthquakeData
             console.log(`  ${idx + 1}. ${point.pref} ${point.addr} - 震度コード${point.scale} → ${scaleCodeToString(point.scale)}`)
         })
         
+        // 観測地点座標データベースを読み込み
+        const stationData = loadObservationStations()
+        
         for (const point of p2pData.points) {
             const intensityKey = scaleCodeToString(point.scale)
             
@@ -242,39 +247,55 @@ export function convertP2PDataToMapData(p2pData: P2PQuakeData): { earthquakeData
                 detailedAreas[intensityKey] = []
             }
             
-            // 都道府県名と市町村名を抽出
+            // 都道府県名と観測地点名を抽出
             const prefName = point.pref
-            const fullAddress = point.addr || ''
+            const stationName = point.addr || ''
             
-            // 市町村レベルの詳細座標を推定
-            const detailedCoords = estimateDetailedCoordinatesFromAddress(prefName, fullAddress)
-            if (detailedCoords) {
-                areas[intensityKey].push(detailedCoords)
+            // 観測地点の座標を取得
+            const stationCoords = getObservationStationCoordinates(stationData, prefName, stationName)
+            if (stationCoords) {
+                areas[intensityKey].push(stationCoords)
                 
                 // 詳細情報も保存
                 detailedAreas[intensityKey].push({
                     prefecture: prefName,
-                    city: fullAddress,
-                    coordinates: detailedCoords,
-                    fullAddress: `${prefName} ${fullAddress}`
+                    city: stationName,
+                    coordinates: stationCoords,
+                    fullAddress: `${prefName} ${stationName}`
                 })
                 
-                console.log(`  震度${intensityKey}: ${prefName} ${fullAddress} → [${detailedCoords[0].toFixed(3)}, ${detailedCoords[1].toFixed(3)}]`)
+                console.log(`  震度${intensityKey}: ${prefName} ${stationName} → [${stationCoords[0].toFixed(3)}, ${stationCoords[1].toFixed(3)}]`)
             } else {
-                // フォールバック: 都道府県レベルの座標
-                const coords = estimateCoordinatesFromAddress(prefName)
-                if (coords) {
-                    areas[intensityKey].push(coords)
+                // フォールバック: 市町村レベルの詳細座標を推定
+                const detailedCoords = estimateDetailedCoordinatesFromAddress(prefName, stationName)
+                if (detailedCoords) {
+                    areas[intensityKey].push(detailedCoords)
+                    
+                    // 詳細情報も保存
                     detailedAreas[intensityKey].push({
                         prefecture: prefName,
-                        city: fullAddress,
-                        coordinates: coords,
-                        fullAddress: `${prefName} ${fullAddress}`
+                        city: stationName,
+                        coordinates: detailedCoords,
+                        fullAddress: `${prefName} ${stationName}`
                     })
                     
-                    console.log(`  震度${intensityKey}: ${prefName} ${fullAddress} → [${coords[0].toFixed(3)}, ${coords[1].toFixed(3)}] (都道府県レベル)`)
+                    console.log(`  震度${intensityKey}: ${prefName} ${stationName} → [${detailedCoords[0].toFixed(3)}, ${detailedCoords[1].toFixed(3)}] (推定)`)
                 } else {
-                    console.warn(`  ⚠️ 座標推定失敗: ${prefName} ${fullAddress}`)
+                    // 最終フォールバック: 都道府県レベルの座標
+                    const coords = estimateCoordinatesFromAddress(prefName)
+                    if (coords) {
+                        areas[intensityKey].push(coords)
+                        detailedAreas[intensityKey].push({
+                            prefecture: prefName,
+                            city: stationName,
+                            coordinates: coords,
+                            fullAddress: `${prefName} ${stationName}`
+                        })
+                        
+                        console.log(`  震度${intensityKey}: ${prefName} ${stationName} → [${coords[0].toFixed(3)}, ${coords[1].toFixed(3)}] (都道府県レベル)`)
+                    } else {
+                        console.warn(`  ⚠️ 座標推定失敗: ${prefName} ${stationName}`)
+                    }
                 }
             }
             
@@ -745,8 +766,75 @@ function getCityOffsets(prefecture: string, address: string): [number, number] |
 }
 
 /**
- * 島や離島の詳細座標データベース
+ * 観測地点データの型定義
  */
+interface ObservationStationData {
+    comment: string
+    note: string
+    stations: {
+        [prefecture: string]: {
+            [stationName: string]: [number, number]
+        }
+    }
+}
+
+/**
+ * 観測地点座標データベースを読み込み
+ */
+function loadObservationStations(): ObservationStationData | null {
+    try {
+        const dataPath = path.join(process.cwd(), 'data', 'observation_stations.json')
+        if (fs.existsSync(dataPath)) {
+            const data = fs.readFileSync(dataPath, 'utf8')
+            return JSON.parse(data)
+        }
+    } catch (error) {
+        console.error('観測地点データの読み込みエラー:', error)
+    }
+    return null
+}
+
+/**
+ * 観測地点名から座標を取得
+ */
+function getObservationStationCoordinates(
+    stationData: ObservationStationData | null,
+    prefecture: string,
+    stationName: string
+): [number, number] | null {
+    if (!stationData || !stationData.stations[prefecture]) {
+        return null
+    }
+    
+    const prefStations = stationData.stations[prefecture]
+    
+    // 完全一致を試行
+    if (prefStations[stationName]) {
+        return prefStations[stationName]
+    }
+    
+    // 部分一致を試行（観測地点名が市区町村名を含む場合）
+    for (const [name, coords] of Object.entries(prefStations)) {
+        if (stationName.includes(name) || name.includes(stationName)) {
+            console.log(`観測地点座標: ${stationName} → ${name} (部分一致)`)
+            return coords
+        }
+    }
+    
+    // 市区町村名を含む場合の処理
+    const cleanedStationName = stationName.replace(/市|町|村|区|郡/, '')
+    for (const [name, coords] of Object.entries(prefStations)) {
+        const cleanedName = name.replace(/市|町|村|区|郡/, '')
+        if (cleanedStationName.includes(cleanedName) || cleanedName.includes(cleanedStationName)) {
+            console.log(`観測地点座標: ${stationName} → ${name} (市区町村名除去後一致)`)
+            return coords
+        }
+    }
+    
+    return null
+}
+
+// 島や離島の詳細座標データベース
 const ISLAND_COORDINATES: { [key: string]: [number, number] } = {
     // 沖縄県の島々
     '石垣島': [124.1561, 24.3364],
