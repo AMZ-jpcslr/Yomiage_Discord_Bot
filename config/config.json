@@ -28,8 +28,8 @@
         "stroke_width": 4
     },
     "seismic_intensity": {
-        "circle": 28,
-        "fontsize": 24,
+        "circle": 32,
+        "fontsize": 40,
         "height": 6,
         "width": 0,
         "font": "Arial Black, sans-serif"
