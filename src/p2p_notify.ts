@@ -381,25 +381,49 @@ async function sendP2PNotification(client: Client, p2pData: P2PQuakeData, isInco
     // 地震情報で震源地がある場合は地図を生成
     if ((p2pData.code === 551 || p2pData.code === 552) && 
         p2pData.earthquake?.hypocenter?.longitude && 
-        p2pData.earthquake?.hypocenter?.latitude &&
-        !isIncomplete) { // 不完全データの場合は地図生成をスキップ
+        p2pData.earthquake?.hypocenter?.latitude) {
         
-        try {
-            const mapData = convertP2PDataToMapData(p2pData)
-            if (mapData) {
-                const mapImagePath = await generateEarthquakeMap(mapData.earthquakeData, mapData.areaInfo)
-                if (mapImagePath) {
-                    const attachment = new AttachmentBuilder(mapImagePath, { name: 'earthquake_map.png' })
-                    files.push(attachment)
+        console.log(`🗾 地図生成条件チェック:`)
+        console.log(`  - コード: ${p2pData.code} (551または552)`)
+        console.log(`  - 震源地経度: ${p2pData.earthquake?.hypocenter?.longitude}`)
+        console.log(`  - 震源地緯度: ${p2pData.earthquake?.hypocenter?.latitude}`)
+        console.log(`  - 不完全データ: ${isIncomplete}`)
+        console.log(`  - 震度データ数: ${p2pData.points?.length || 0}`)
+        
+        if (isIncomplete) {
+            console.log('⚠️ 不完全データのため地図生成をスキップ')
+        } else {
+            try {
+                console.log('🔄 地図データ変換開始...')
+                const mapData = convertP2PDataToMapData(p2pData)
+                if (mapData) {
+                    console.log('✅ 地図データ変換成功')
+                    console.log(`  - 震度エリア数: ${Object.keys(mapData.areaInfo.areas).length}`)
+                    console.log(`  - 詳細エリア数: ${Object.keys(mapData.areaInfo.detailedAreas || {}).length}`)
                     
-                    // 地図画像を埋め込みの画像として設定
-                    embed.setImage('attachment://earthquake_map.png')
-                    console.log('🗾 地震マップ生成成功（埋め込み画像として設定）')
+                    const mapImagePath = await generateEarthquakeMap(mapData.earthquakeData, mapData.areaInfo)
+                    if (mapImagePath) {
+                        const attachment = new AttachmentBuilder(mapImagePath, { name: 'earthquake_map.png' })
+                        files.push(attachment)
+                        
+                        // 地図画像を埋め込みの画像として設定
+                        embed.setImage('attachment://earthquake_map.png')
+                        console.log('🗾 地震マップ生成成功（埋め込み画像として設定）')
+                    } else {
+                        console.log('⚠️ 地震マップ生成失敗: 画像パスがnull')
+                    }
+                } else {
+                    console.log('⚠️ 地震マップ生成失敗: mapDataがnull')
                 }
+            } catch (mapError) {
+                console.error('❌ 地震マップ生成エラー:', mapError)
             }
-        } catch (mapError) {
-            console.error('❌ 地震マップ生成エラー:', mapError)
         }
+    } else {
+        console.log('⚠️ 地図生成条件未満足のためスキップ')
+        console.log(`  - コード: ${p2pData.code} (551または552以外)`)
+        console.log(`  - 震源地経度: ${p2pData.earthquake?.hypocenter?.longitude || 'なし'}`)
+        console.log(`  - 震源地緯度: ${p2pData.earthquake?.hypocenter?.latitude || 'なし'}`)
     }
     
     let successCount = 0
