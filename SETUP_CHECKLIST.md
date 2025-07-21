@@ -14,6 +14,14 @@
   └── README.md
   ```
 
+### **Discord Developer Portal設定（重要）**
+- [ ] Discord Developer Portal (https://discord.com/developers/applications) にアクセス
+- [ ] あなたのBotアプリケーションを選択
+- [ ] 「Bot」→「Privileged Gateway Intents」で以下を有効化:
+  - [ ] ☑️ MESSAGE CONTENT INTENT（必須）
+  - [ ] ☑️ GUILD VOICE STATES INTENT（推奨）
+- [ ] 「Save Changes」をクリック
+
 ### **権限確認**
 - [ ] Railwayプロジェクトの管理者権限
 - [ ] GitHubリポジトリのプッシュ権限
@@ -44,7 +52,14 @@
 - [ ] **3-1.** 「Deployments」タブでデプロイ開始を確認
 - [ ] **3-2.** デプロイ完了まで待機（5-10分）
 - [ ] **3-3.** ステータスが「Success」になることを確認
-- [ ] **3-4.** ログでエラーがないことを確認
+- [ ] **3-4.** ログで以下を確認:
+  ```
+  ✓ Built image
+  ✓ Starting deployment
+  ✓ Deployment successful
+  
+  ※ VoiceVox利用規約（波音リツ、九州そらなど）の表示は正常です
+  ```
 
 ### **ステップ4: URL取得** 📋
 - [ ] **4-1.** 「Settings」タブに移動
@@ -90,6 +105,44 @@
 ---
 
 ## 🛠️ トラブル時の対処法
+
+### **VoiceVoxデプロイに関する注意事項**
+```
+📋 VoiceVox利用規約の表示について:
+
+ログに以下が表示されるのは正常です:
+- 波音リツ
+- 九州そら  
+- 玄野武宏
+- 白上虎太郎
+- 青山龍星
+- 冥鳴ひまり
+
+これらは各音声ライブラリの利用規約で、
+「デプロイ失敗」ではありません。
+
+重要: ステータスが「Success」かどうかで判断してください。
+```
+
+### **Pythonパスエラーの場合**
+```
+症状: "python: not found" または "/entrypoint.sh: line 7: exec: python: not found"
+原因: VoiceVoxエンジンDockerイメージ内のPythonパス問題
+解決: 最新のDockerfileが適用されているか確認
+詳細: VOICEVOX_DOCKER_FIX.md を参照
+
+修正手順:
+1. git pull origin master （最新のDockerfile取得）
+2. Railway → VoiceVoxサービス → 再デプロイ実行
+```
+
+### **Discord Intentsエラーの場合**
+```
+症状: "Error: Used disallowed intents" 
+原因: Discord Developer Portalで特権インテントが無効
+解決: 事前確認の「Discord Developer Portal設定」を完了してください
+詳細: INTENTS_QUICK_FIX.md を参照
+```
 
 ### **デプロイが失敗する場合**
 1. **メモリ設定確認:**
