@@ -47,7 +47,7 @@ export const data = new SlashCommandBuilder()
     )
     .addBooleanOption(opt =>
         opt.setName('show_all')
-            .setDescription('サーバー内全チャンネルの設定を表示（管理者のみ）')
+            .setDescription('サーバー内全チャンネルの設定を表示')
             .setRequired(false)
     )
 
@@ -55,16 +55,8 @@ export async function execute(interaction: ChatInputCommandInteraction) {
     try {
         const showAll = interaction.options.getBoolean('show_all') || false
         
-        // 全チャンネル表示の場合は管理者権限をチェック
+        // 全チャンネル表示の場合
         if (showAll) {
-            if (!interaction.memberPermissions?.has('Administrator')) {
-                await interaction.reply({
-                    content: '❌ 全チャンネルの設定を表示するには管理者権限が必要です。',
-                    ephemeral: true
-                })
-                return
-            }
-            
             // サーバー内全チャンネルの設定を表示
             const allConfig = loadAllMinIntensityConfig()
             const guildChannels = await interaction.guild?.channels.fetch()

@@ -60,15 +60,6 @@ export async function execute(interaction: ChatInputCommandInteraction) {
             return
         }
         
-        // 権限チェック（管理者権限が必要）
-        if (!interaction.memberPermissions?.has('Administrator')) {
-            await interaction.reply({
-                content: '❌ このコマンドを実行するには管理者権限が必要です。',
-                ephemeral: true
-            })
-            return
-        }
-        
         // 現在の設定を取得
         const currentMinIntensity = getChannelMinIntensity(targetChannel.id)
         const currentIntensityStr = currentMinIntensity === 0 ? 'すべて' : getIntensityString(currentMinIntensity)
