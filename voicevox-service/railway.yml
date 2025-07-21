@@ -1,0 +1,14 @@
+build:
+  dockerFilePath: Dockerfile
+
+environment:
+  PORT: 50021
+
+resources:
+  memory: 1024
+  cpu: 500
+
+healthcheck:
+  path: /version
+  interval: 30
+  timeout: 10

@@ -4,14 +4,18 @@
 # ビルド設定
 build:
   buildCommand: npm run build
-  startCommand: npm run start:prod
+  startCommand: npm run start:railway
 
 # 環境変数
 environment:
   NODE_ENV: production
+  RAILWAY: true
   FORCE_MAP_GENERATION: true
   CANVAS_PREBUILT: false
   NODE_OPTIONS: "--max-old-space-size=2048"
+  # VoiceVox設定（デフォルト無効）
+  VOICEVOX_ENABLED: false
+  # VOICEVOX_API_URL: "http://your-vps-ip:50021"  # 外部VoiceVoxサーバーのURL
 
 # リソース設定
 resources:

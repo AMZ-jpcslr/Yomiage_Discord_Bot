@@ -61,3 +61,18 @@ jspm_packages/
 .Trashes
 ehthumbs.db
 Thumbs.db
+
+# Audio files (VoiceVox generated)
+audio/
+*.wav
+*.mp3
+
+# Generated images
+generated_images/*.png
+!generated_images/.gitkeep
+
+# Voice channel configurations
+data/voice_channels.json
+
+# VoiceVox service logs
+voicevox-service/logs/
