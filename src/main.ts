@@ -22,16 +22,17 @@ dotenv.config()
 // 環境変数とトークンの確認
 console.log('=== Discord地震速報ボット起動開始 ===')
 console.log('NODE_ENV:', process.env.NODE_ENV)
-console.log('TOKEN確認:', process.env.TOKEN ? '✅ 設定済み' : '❌ 未設定')
+console.log('TOKEN確認:', process.env.DISCORD_TOKEN ? '✅ 設定済み' : '❌ 未設定')
 console.log('FORCE_MAP_GENERATION:', process.env.FORCE_MAP_GENERATION)
 console.log('SKIP_MAP_GENERATION:', process.env.SKIP_MAP_GENERATION)
+console.log('VOICEVOX_ENABLED:', process.env.VOICEVOX_ENABLED)
 
 const client = new Client({
     intents: [
         GatewayIntentBits.Guilds,
         GatewayIntentBits.GuildMessages,
-        GatewayIntentBits.MessageContent,  // メッセージ内容の取得
-        GatewayIntentBits.GuildVoiceStates,  // ボイス状態の監視
+        GatewayIntentBits.MessageContent,  // メッセージ内容の取得（特権インテント）
+        GatewayIntentBits.GuildVoiceStates,  // ボイス状態の監視（特権インテント）
     ],
 })
 
@@ -239,14 +240,35 @@ server.listen(port, () => {
 })
 
 // Botにログイン
-const token = process.env.TOKEN
+const token = process.env.DISCORD_TOKEN || process.env.TOKEN
 if (!token) {
-    console.error('❌ TOKENが設定されていません')
+    console.error('❌ DISCORD_TOKEN または TOKEN が設定されていません')
+    console.error('環境変数を確認してください:')
+    console.error('- DISCORD_TOKEN: Discord Bot のトークン')
+    console.error('- TOKEN: 旧形式のトークン（互換性用）')
     process.exit(1)
 }
 
 console.log('🚀 Discord Botを起動中...')
+console.log('使用Intents:', [
+    'Guilds',
+    'GuildMessages', 
+    'MessageContent（特権）',
+    'GuildVoiceStates（特権）'
+])
+
 client.login(token).catch(error => {
     console.error('❌ ボットのログインに失敗:', error)
+    if (error.message.includes('disallowed intents')) {
+        console.error('')
+        console.error('🔧 解決方法:')
+        console.error('1. Discord Developer Portal (https://discord.com/developers/applications) にアクセス')
+        console.error('2. あなたのBotアプリケーションを選択')
+        console.error('3. 「Bot」設定で以下の特権インテントを有効化:')
+        console.error('   ☑️ MESSAGE CONTENT INTENT')
+        console.error('   ☑️ GUILD VOICE STATES INTENT (ボイス機能用)')
+        console.error('4. 「Save Changes」をクリック')
+        console.error('')
+    }
     process.exit(1)
 })

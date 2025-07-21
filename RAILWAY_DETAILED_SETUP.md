@@ -71,6 +71,17 @@
 
 ### **ステップ3: Discord Botサービスの設定** 🤖
 
+⚠️ **重要: 事前にDiscord Developer Portalでの設定が必要です**
+
+VoiceVox機能を使用するには、特権インテントの有効化が必要です:
+1. https://discord.com/developers/applications でBotアプリを開く
+2. 「Bot」→「Privileged Gateway Intents」で以下を有効化:
+   - ☑️ **MESSAGE CONTENT INTENT** (必須)
+   - ☑️ **GUILD VOICE STATES INTENT** (推奨)
+3. 「Save Changes」をクリック
+
+*詳細は `DISCORD_INTENTS_FIX.md` を参照してください。*
+
 #### 3-1. Discord Botサービスの選択
 1. プロジェクト画面に戻る（上部のプロジェクト名をクリック）
 2. **Discord Bot のサービス**（既存）をクリック
@@ -152,6 +163,20 @@ RAILWAY: true
 ## 🛠️ トラブルシューティング
 
 ### ❌ よくある問題と解決方法
+
+#### **問題0: Discord Bot Intentsエラー**
+```
+症状: "Error: Used disallowed intents" でBot起動失敗
+原因: Discord Developer Portalで特権インテントが無効
+解決方法:
+1. https://discord.com/developers/applications でBotアプリを開く
+2. 「Bot」→「Privileged Gateway Intents」を確認
+3. MESSAGE CONTENT INTENT を有効化（必須）
+4. GUILD VOICE STATES INTENT を有効化（推奨）
+5. 「Save Changes」→ Railway で再デプロイ
+
+詳細ガイド: DISCORD_INTENTS_FIX.md を参照
+```
 
 #### **問題1: VoiceVoxサービスのデプロイが失敗する**
 ```
