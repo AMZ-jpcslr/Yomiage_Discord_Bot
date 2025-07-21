@@ -13,10 +13,15 @@ interface EQChannelConfig {
     [guildId: string]: string
 }
 
+interface EQMinIntensityConfig {
+    [channelId: string]: number // P2P震度コード (10=震度1, 20=震度2, 30=震度3, etc.)
+}
+
 // 前回の通知データを保存するためのファイル
 const DATA_DIR = path.resolve(__dirname, '../data')
 const LAST_NOTIFICATION_FILE = path.join(DATA_DIR, 'last_p2p_notification.json')
 const EQ_CHANNELS_FILE = path.join(DATA_DIR, 'eq_channels.json')
+const EQ_MIN_INTENSITY_FILE = path.join(DATA_DIR, 'eq_min_intensity.json')
 
 interface LastNotificationData {
     [key: string]: {
@@ -83,6 +88,61 @@ function loadEQChannels(): EQChannelConfig {
         console.error('❌ チャンネル設定の読み込みエラー:', error)
     }
     return {}
+}
+
+/**
+ * 最低震度設定を読み込み
+ */
+function loadMinIntensityConfig(): EQMinIntensityConfig {
+    try {
+        console.log(`📁 最低震度設定ファイルパス: ${EQ_MIN_INTENSITY_FILE}`)
+        
+        if (fs.existsSync(EQ_MIN_INTENSITY_FILE)) {
+            const data = fs.readFileSync(EQ_MIN_INTENSITY_FILE, 'utf8')
+            const config = JSON.parse(data)
+            console.log(`✅ 最低震度設定読み込み成功: ${Object.keys(config).length}チャンネル設定済み`)
+            console.log(`設定内容:`, config)
+            return config
+        } else {
+            console.log('⚠️ 最低震度設定ファイルが存在しません:', EQ_MIN_INTENSITY_FILE)
+        }
+    } catch (error) {
+        console.error('❌ 最低震度設定の読み込みエラー:', error)
+    }
+    return {}
+}
+
+/**
+ * 最低震度設定を保存
+ */
+function saveMinIntensityConfig(config: EQMinIntensityConfig): void {
+    try {
+        if (!fs.existsSync(DATA_DIR)) {
+            fs.mkdirSync(DATA_DIR, { recursive: true })
+        }
+        
+        fs.writeFileSync(EQ_MIN_INTENSITY_FILE, JSON.stringify(config, null, 2))
+        console.log('✅ 最低震度設定保存完了')
+    } catch (error) {
+        console.error('❌ 最低震度設定の保存エラー:', error)
+    }
+}
+
+/**
+ * チャンネルの最低震度設定を取得
+ */
+export function getChannelMinIntensity(channelId: string): number {
+    const config = loadMinIntensityConfig()
+    return config[channelId] || 0 // デフォルトは0（すべての震度を通知）
+}
+
+/**
+ * チャンネルの最低震度設定を更新
+ */
+export function setChannelMinIntensity(channelId: string, minIntensity: number): void {
+    const config = loadMinIntensityConfig()
+    config[channelId] = minIntensity
+    saveMinIntensityConfig(config)
 }
 
 /**
@@ -318,6 +378,61 @@ async function fallbackP2PHttpPolling(client: Client): Promise<void> {
 }
 
 /**
+ * P2P震度コードから震度文字列に変換
+ */
+function getIntensityString(p2pCode: number): string {
+    if (p2pCode >= 70) return '7'
+    if (p2pCode >= 60) return '6+'
+    if (p2pCode >= 55) return '6-'
+    if (p2pCode >= 50) return '5+'
+    if (p2pCode >= 45) return '5-'
+    if (p2pCode >= 40) return '4'
+    if (p2pCode >= 30) return '3'
+    if (p2pCode >= 20) return '2'
+    if (p2pCode >= 10) return '1'
+    return '0'
+}
+
+/**
+ * 震度がチャンネルの最低震度を満たしているかチェック
+ */
+function meetsMinIntensityThreshold(p2pData: P2PQuakeData, channelId: string): boolean {
+    // 地震情報以外は常に通知
+    if (p2pData.code !== 551 && p2pData.code !== 552) {
+        console.log(`📢 地震情報以外（コード${p2pData.code}）のため最低震度チェックをスキップ`)
+        return true
+    }
+    
+    // 地震情報がない場合は通知
+    if (!p2pData.earthquake?.maxScale) {
+        console.log(`📢 地震情報が不完全のため最低震度チェックをスキップ`)
+        return true
+    }
+    
+    const channelMinIntensity = getChannelMinIntensity(channelId)
+    
+    // 最低震度が設定されていない場合はすべて通知
+    if (channelMinIntensity === 0) {
+        console.log(`📢 チャンネル${channelId}: 最低震度未設定のためすべて通知`)
+        return true
+    }
+    
+    const earthquakeMaxScale = p2pData.earthquake.maxScale
+    const meetsThreshold = earthquakeMaxScale >= channelMinIntensity
+    
+    const currentIntensityStr = getIntensityString(earthquakeMaxScale)
+    const minIntensityStr = getIntensityString(channelMinIntensity)
+    
+    if (!meetsThreshold) {
+        console.log(`🔇 最低震度フィルター: チャンネル${channelId} - 現在震度${currentIntensityStr} < 最低震度${minIntensityStr} のため通知スキップ`)
+    } else {
+        console.log(`✅ 最低震度チェック通過: チャンネル${channelId} - 現在震度${currentIntensityStr} >= 最低震度${minIntensityStr}`)
+    }
+    
+    return meetsThreshold
+}
+
+/**
  * P2P情報の通知を送信（全種別対応）
  */
 async function sendP2PNotification(client: Client, p2pData: P2PQuakeData, isIncomplete: boolean = false): Promise<void> {
@@ -334,6 +449,12 @@ async function sendP2PNotification(client: Client, p2pData: P2PQuakeData, isInco
         console.log('⚠️ 通知チャンネルが設定されていません')
         console.log('💡 /set_eq_channel コマンドでチャンネルを設定してください')
         return
+    }
+    
+    // 地震情報の場合は最大震度をログ出力
+    if ((p2pData.code === 551 || p2pData.code === 552) && p2pData.earthquake?.maxScale) {
+        const intensityStr = getIntensityString(p2pData.earthquake.maxScale)
+        console.log(`🌪️ 地震最大震度: ${intensityStr} (P2Pコード: ${p2pData.earthquake.maxScale})`)
     }
     
     // Discord埋め込みを作成
@@ -357,17 +478,9 @@ async function sendP2PNotification(client: Client, p2pData: P2PQuakeData, isInco
         
         // P2P震度コードから震度文字列に変換
         const maxScale = p2pData.earthquake.maxScale
-        const scaleStr = maxScale >= 70 ? '7' :
-                       maxScale >= 60 ? '6+' :
-                       maxScale >= 55 ? '6-' :
-                       maxScale >= 50 ? '5+' :
-                       maxScale >= 45 ? '5-' :
-                       maxScale >= 40 ? '4' :
-                       maxScale >= 30 ? '3' :
-                       maxScale >= 20 ? '2' :
-                       maxScale >= 10 ? '1' : null
+        const scaleStr = getIntensityString(maxScale)
         
-        if (scaleStr) {
+        if (scaleStr !== '0') {
             const intensityIconPath = getIntensityIconPath(scaleStr)
             if (intensityIconPath) {
                 const iconAttachment = new AttachmentBuilder(intensityIconPath, { name: 'intensity_icon.png' })
@@ -427,10 +540,17 @@ async function sendP2PNotification(client: Client, p2pData: P2PQuakeData, isInco
     }
     
     let successCount = 0
+    let filteredCount = 0
     
     // 各設定済みチャンネルに送信
     for (const [, channelId] of Object.entries(eqChannels)) {
         try {
+            // 最低震度チェック
+            if (!meetsMinIntensityThreshold(p2pData, channelId)) {
+                filteredCount++
+                continue
+            }
+            
             const channel = await client.channels.fetch(channelId) as TextChannel
             
             if (channel && channel.isTextBased()) {
@@ -448,5 +568,16 @@ async function sendP2PNotification(client: Client, p2pData: P2PQuakeData, isInco
     
     // 通知履歴を保存
     saveLastNotificationData(p2pData.id, isIncomplete)
-    console.log(`📝 通知履歴保存完了 (${successCount}チャンネルに送信済み)`)
+    
+    const totalChannels = Object.keys(eqChannels).length
+    console.log(`📝 通知履歴保存完了`)
+    console.log(`📊 通知統計: ${successCount}/${totalChannels}チャンネルに送信済み`)
+    console.log(`🔇 フィルター統計: ${filteredCount}チャンネルで最低震度フィルターにより非通知`)
+    
+    if (successCount === 0) {
+        console.log(`⚠️ 注意: どのチャンネルにも通知されませんでした`)
+        if (filteredCount > 0) {
+            console.log(`💡 理由: すべてのチャンネルで最低震度設定により除外されました`)
+        }
+    }
 }
