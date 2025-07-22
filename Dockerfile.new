@@ -26,13 +26,19 @@ RUN npm run build
 # 用量削減のため開発依存関係を削除
 RUN npm prune --production
 
+# アプリケーション用ディレクトリを作成し、node ユーザーに権限を付与
+RUN mkdir -p /app/build/data /app/data /app/audio /app/generated_images && \
+    chown -R node:node /app
+
 # デバッグ情報の出力
 RUN echo "=== ビルド完了 ===" && \
     echo "Node.js version: $(node --version)" && \
     echo "npm version: $(npm --version)" && \
     echo "FFmpeg version: $(ffmpeg -version | head -1)" && \
     echo "Working directory: $(pwd)" && \
-    ls -la
+    ls -la && \
+    echo "=== ディレクトリ権限確認 ===" && \
+    ls -la /app/
 
 # 非特権ユーザーとして実行
 USER node
