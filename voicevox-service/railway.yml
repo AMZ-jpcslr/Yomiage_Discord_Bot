@@ -4,11 +4,19 @@ build:
 environment:
   PORT: 50021
 
+# Railway環境での安定性を重視したリソース設定
 resources:
-  memory: 1024
-  cpu: 500
+  memory: 1536  # メモリ増量で安定性向上
+  cpu: 1000     # CPU増量でクラッシュ防止
 
+# ヘルスチェック設定の最適化
 healthcheck:
   path: /version
-  interval: 30
-  timeout: 10
+  interval: 60     # チェック間隔を延長
+  timeout: 30      # タイムアウトを延長
+  retries: 5       # リトライ回数追加
+
+# 起動時間の延長設定
+deploy:
+  sleepBeforeStop: 10
+  restartPolicy: always

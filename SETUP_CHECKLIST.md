@@ -124,6 +124,20 @@
 重要: ステータスが「Success」かどうかで判断してください。
 ```
 
+### **VoiceVoxサービスクラッシュの場合**
+```
+症状: "更新が多すぎてクラッシュした" または頻繁な再起動
+原因: ログ出力過多、リソース不足、ヘルスチェック失敗
+解決: 最適化されたDockerfileとrailway.ymlが適用済み
+詳細: VOICEVOX_CRASH_FIX.md を参照
+
+確認手順:
+1. 最新のリポジトリをpull
+2. Railway → VoiceVoxサービス → 再デプロイ
+3. Logsで安定稼働を確認（5分以上）
+4. /version エンドポイントで動作確認
+```
+
 ### **Pythonパスエラーの場合**
 ```
 症状: "python: not found" または "/entrypoint.sh: line 7: exec: python: not found"
