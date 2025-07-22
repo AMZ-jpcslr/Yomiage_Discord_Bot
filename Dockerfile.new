@@ -34,11 +34,6 @@ RUN echo "=== ビルド完了 ===" && \
     echo "Working directory: $(pwd)" && \
     ls -la
 
-# dataディレクトリの権限設定
-RUN mkdir -p /app/data && \
-    chown -R node:node /app/data && \
-    chmod -R 755 /app/data
-
 # 非特権ユーザーとして実行
 USER node
 

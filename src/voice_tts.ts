@@ -56,7 +56,7 @@ interface VoiceChannelConfig {
 }
 
 // 音声チャンネル設定ファイル
-const VOICE_CONFIG_FILE = path.resolve(__dirname, '../data/voice_channels.json')
+const VOICE_CONFIG_FILE = path.resolve(__dirname, '../data/voice_tts_config.json')
 
 /**
  * 音声チャンネル設定を読み込み
