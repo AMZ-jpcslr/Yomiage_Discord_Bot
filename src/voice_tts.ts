@@ -52,7 +52,23 @@ interface VoiceChannelConfig {
     [guildId: string]: {
         voiceChannelId: string
         textChannelId: string
+        speakerId?: number
+        speed?: number
+        pitch?: number
     }
+}
+
+interface VoiceSettings {
+    speakerId: number
+    speed: number
+    pitch: number
+}
+
+// デフォルト音声設定
+const DEFAULT_VOICE_SETTINGS: VoiceSettings = {
+    speakerId: 3, // ずんだもん（ノーマル）
+    speed: 1.0,   // 通常速度
+    pitch: 0.0    // 通常音程
 }
 
 // 音声チャンネル設定ファイル
@@ -108,6 +124,53 @@ export function removeVoiceChannelConfig(guildId: string): void {
 }
 
 /**
+ * 音声設定を更新
+ */
+export function updateVoiceSettings(guildId: string, settings: Partial<VoiceSettings>): void {
+    const config = loadVoiceChannelConfig()
+    if (config[guildId]) {
+        if (settings.speakerId !== undefined) config[guildId].speakerId = settings.speakerId
+        if (settings.speed !== undefined) config[guildId].speed = settings.speed
+        if (settings.pitch !== undefined) config[guildId].pitch = settings.pitch
+        saveVoiceChannelConfig(config)
+        console.log(`✅ 音声設定更新: ${guildId}`, settings)
+    }
+}
+
+/**
+ * 音声設定を取得
+ */
+export function getVoiceSettings(guildId: string): VoiceSettings {
+    const config = loadVoiceChannelConfig()
+    const guildConfig = config[guildId]
+    
+    return {
+        speakerId: guildConfig?.speakerId ?? DEFAULT_VOICE_SETTINGS.speakerId,
+        speed: guildConfig?.speed ?? DEFAULT_VOICE_SETTINGS.speed,
+        pitch: guildConfig?.pitch ?? DEFAULT_VOICE_SETTINGS.pitch
+    }
+}
+
+/**
+ * スピーカーID から名前を取得
+ */
+export function getSpeakerName(speakerId: number): string {
+    const speakers: { [key: number]: string } = {
+        0: '四国めたん（あまあま）',
+        1: 'ずんだもん（あまあま）',
+        2: '四国めたん（ノーマル）',
+        3: 'ずんだもん（ノーマル）',
+        6: '四国めたん（ツンツン）',
+        7: 'ずんだもん（ツンツン）',
+        8: '春日部つむぎ（ノーマル）',
+        9: '波音リツ（ノーマル）',
+        10: '雨晴はう（ノーマル）',
+        11: '玄野武宏（ノーマル）'
+    }
+    return speakers[speakerId] || `不明（ID: ${speakerId}）`
+}
+
+/**
  * VoiceVox APIの可用性をチェック（Railway内部サービス対応）
  */
 async function checkVoiceVoxAvailability(): Promise<boolean> {
@@ -153,12 +216,13 @@ async function checkVoiceVoxAvailability(): Promise<boolean> {
 /**
  * VoiceVox APIで音声合成
  */
-async function synthesizeVoice(text: string): Promise<Buffer | null> {
+async function synthesizeVoice(text: string, guildId: string): Promise<Buffer | null> {
     try {
-        console.log(`🎤 VoiceVox音声合成開始: "${text}"`)
+        const settings = getVoiceSettings(guildId)
+        console.log(`🎤 VoiceVox音声合成開始: "${text}" (Speaker: ${getSpeakerName(settings.speakerId)}, Speed: ${settings.speed}, Pitch: ${settings.pitch})`)
         
         // まず音素クエリを取得
-        const queryResponse = await fetch(`${VOICEVOX_API_URL}/audio_query?text=${encodeURIComponent(text)}&speaker=${ZUNDAMON_SPEAKER_ID}`, {
+        const queryResponse = await fetch(`${VOICEVOX_API_URL}/audio_query?text=${encodeURIComponent(text)}&speaker=${settings.speakerId}`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
@@ -172,8 +236,12 @@ async function synthesizeVoice(text: string): Promise<Buffer | null> {
         
         const audioQuery = await queryResponse.json()
         
+        // 音声設定を適用
+        audioQuery.speedScale = settings.speed
+        audioQuery.pitchScale = settings.pitch
+        
         // 音声合成を実行
-        const synthesisResponse = await fetch(`${VOICEVOX_API_URL}/synthesis?speaker=${ZUNDAMON_SPEAKER_ID}`, {
+        const synthesisResponse = await fetch(`${VOICEVOX_API_URL}/synthesis?speaker=${settings.speakerId}`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
@@ -214,7 +282,7 @@ async function createAudioFile(text: string, guildId: string): Promise<string | 
         }
         
         // VoiceVoxで音声合成
-        const audioBuffer = await synthesizeVoice(text)
+        const audioBuffer = await synthesizeVoice(text, guildId)
         if (!audioBuffer) {
             return null
         }

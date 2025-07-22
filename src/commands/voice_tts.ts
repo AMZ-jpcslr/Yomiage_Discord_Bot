@@ -1,5 +1,5 @@
 import { SlashCommandBuilder, ChatInputCommandInteraction, ChannelType, VoiceChannel, TextChannel } from 'discord.js'
-import { joinVoiceChannelById, leaveVoiceChannel, setVoiceChannelConfig, removeVoiceChannelConfig } from '../voice_tts'
+import { joinVoiceChannelById, leaveVoiceChannel, setVoiceChannelConfig, removeVoiceChannelConfig, updateVoiceSettings, getVoiceSettings, getSpeakerName } from '../voice_tts'
 
 // HTTP クライアントの設定（Node.js バージョン互換性対応）
 let fetch: typeof globalThis.fetch
@@ -45,6 +45,45 @@ export const data = new SlashCommandBuilder()
             .setName('status')
             .setDescription('現在の音声読み上げ設定を確認')
     )
+    .addSubcommand(subcommand =>
+        subcommand
+            .setName('settings')
+            .setDescription('音声読み上げの設定を変更')
+            .addStringOption(option =>
+                option
+                    .setName('speaker')
+                    .setDescription('音声モデルを選択')
+                    .addChoices(
+                        { name: 'ずんだもん（ノーマル）', value: '3' },
+                        { name: 'ずんだもん（あまあま）', value: '1' },
+                        { name: 'ずんだもん（ツンツン）', value: '7' },
+                        { name: '四国めたん（ノーマル）', value: '2' },
+                        { name: '四国めたん（あまあま）', value: '0' },
+                        { name: '四国めたん（ツンツン）', value: '6' },
+                        { name: '春日部つむぎ（ノーマル）', value: '8' },
+                        { name: '波音リツ（ノーマル）', value: '9' },
+                        { name: '雨晴はう（ノーマル）', value: '10' },
+                        { name: '玄野武宏（ノーマル）', value: '11' }
+                    )
+                    .setRequired(false)
+            )
+            .addNumberOption(option =>
+                option
+                    .setName('speed')
+                    .setDescription('読み上げ速度（0.5〜2.0、デフォルト: 1.0）')
+                    .setMinValue(0.5)
+                    .setMaxValue(2.0)
+                    .setRequired(false)
+            )
+            .addNumberOption(option =>
+                option
+                    .setName('pitch')
+                    .setDescription('音の高さ（-0.15〜0.15、デフォルト: 0.0）')
+                    .setMinValue(-0.15)
+                    .setMaxValue(0.15)
+                    .setRequired(false)
+            )
+    )
 
 export async function execute(interaction: ChatInputCommandInteraction) {
     try {
@@ -67,6 +106,9 @@ export async function execute(interaction: ChatInputCommandInteraction) {
                 break
             case 'status':
                 await handleStatusCommand(interaction)
+                break
+            case 'settings':
+                await handleSettingsCommand(interaction)
                 break
         }
         
@@ -202,9 +244,49 @@ async function handleStatusCommand(interaction: ChatInputCommandInteraction) {
     
     const voiceChannel = interaction.guild!.channels.cache.get(guildConfig.voiceChannelId)
     const textChannel = interaction.guild!.channels.cache.get(guildConfig.textChannelId)
+    const settings = getVoiceSettings(interaction.guild!.id)
     
     await interaction.reply({
-        content: `📊 **音声読み上げ設定状況**\n\n🔊 ボイスチャンネル: ${voiceChannel ? `<#${voiceChannel.id}>` : '❌ チャンネルが見つかりません'}\n📝 テキストチャンネル: ${textChannel ? `<#${textChannel.id}>` : '❌ チャンネルが見つかりません'}\n\n🎤 **VoiceVoxずんだもん**で読み上げ中`,
+        content: `📊 **音声読み上げ設定状況**\n\n🔊 ボイスチャンネル: ${voiceChannel ? `<#${voiceChannel.id}>` : '❌ チャンネルが見つかりません'}\n📝 テキストチャンネル: ${textChannel ? `<#${textChannel.id}>` : '❌ チャンネルが見つかりません'}\n\n� **音声設定**\n🎤 音声モデル: ${getSpeakerName(settings.speakerId)}\n⚡ 読み上げ速度: ${settings.speed}倍\n🎶 音の高さ: ${settings.pitch > 0 ? '+' : ''}${settings.pitch}`,
         ephemeral: true
     })
+}
+
+async function handleSettingsCommand(interaction: ChatInputCommandInteraction) {
+    const speakerId = interaction.options.getString('speaker')
+    const speed = interaction.options.getNumber('speed')
+    const pitch = interaction.options.getNumber('pitch')
+    
+    if (!speakerId && speed === null && pitch === null) {
+        await interaction.reply({
+            content: '❌ 少なくとも1つの設定項目を指定してください。',
+            ephemeral: true
+        })
+        return
+    }
+    
+    // 設定を更新
+    const updates: any = {}
+    if (speakerId) updates.speakerId = parseInt(speakerId)
+    if (speed !== null) updates.speed = speed
+    if (pitch !== null) updates.pitch = pitch
+    
+    updateVoiceSettings(interaction.guild!.id, updates)
+    
+    // 更新された設定を取得して表示
+    const newSettings = getVoiceSettings(interaction.guild!.id)
+    
+    let changesText = '🎵 **音声設定を更新しました！**\n\n'
+    if (speakerId) changesText += `🎤 音声モデル: ${getSpeakerName(newSettings.speakerId)}\n`
+    if (speed !== null) changesText += `⚡ 読み上げ速度: ${newSettings.speed}倍\n`
+    if (pitch !== null) changesText += `🎶 音の高さ: ${newSettings.pitch > 0 ? '+' : ''}${newSettings.pitch}\n`
+    
+    changesText += '\n次回の読み上げから新しい設定が適用されます。'
+    
+    await interaction.reply({
+        content: changesText,
+        ephemeral: false
+    })
+    
+    console.log(`✅ [voice_tts] 設定更新: ${interaction.guild!.name}`, updates)
 }
