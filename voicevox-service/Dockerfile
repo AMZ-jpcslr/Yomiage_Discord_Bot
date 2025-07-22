@@ -39,14 +39,33 @@ echo '/opt/python/bin/python3.11 -c "import soxr; print(\"soxr: OK\")" 2>/dev/nu
 echo '/opt/python/bin/python3.11 -c "import uvicorn; print(\"uvicorn: OK\")" 2>/dev/null || echo "uvicorn: FAILED"' >> /opt/voicevox_engine/start.sh && \
 echo '/opt/python/bin/python3.11 -c "import fastapi; print(\"fastapi: OK\")" 2>/dev/null || echo "fastapi: FAILED"' >> /opt/voicevox_engine/start.sh && \
 echo 'echo ""' >> /opt/voicevox_engine/start.sh && \
+echo 'echo "=== 🎌 VoiceVox Core Detection ==="' >> /opt/voicevox_engine/start.sh && \
+echo 'echo "Searching for VoiceVox cores..."' >> /opt/voicevox_engine/start.sh && \
+echo 'find /opt -name "*.so" -o -name "libcore*" -o -name "*voicevox*" 2>/dev/null | head -10' >> /opt/voicevox_engine/start.sh && \
+echo 'echo "Core directories:"' >> /opt/voicevox_engine/start.sh && \
+echo 'ls -la /opt/voicevox_engine/ | grep -E "(core|lib)" || echo "No core dirs in engine"' >> /opt/voicevox_engine/start.sh && \
+echo 'ls -la /opt/ | grep -E "(core|voicevox)" || echo "No core dirs in opt"' >> /opt/voicevox_engine/start.sh && \
+echo 'echo ""' >> /opt/voicevox_engine/start.sh && \
 echo 'echo "=== 🚀🎌🎵 VOICEVOX ABSOLUTE FINAL LAUNCH ==="' >> /opt/voicevox_engine/start.sh && \
 echo 'export PYTHONPATH="/opt/python/lib/python3.11/site-packages"' >> /opt/voicevox_engine/start.sh && \
 echo 'echo "PYTHONPATH: $PYTHONPATH"' >> /opt/voicevox_engine/start.sh && \
 echo 'echo "🎌 Complete Japanese TTS Engine with Voice Morphing"' >> /opt/voicevox_engine/start.sh && \
 echo 'echo "🌐 Railway URL: https://voicevox-engine-production.up.railway.app"' >> /opt/voicevox_engine/start.sh && \
 echo 'echo "🎵 All VoiceVox features enabled!"' >> /opt/voicevox_engine/start.sh && \
-echo 'echo "🚀 Starting server..."' >> /opt/voicevox_engine/start.sh && \
-echo 'exec /opt/python/bin/python3.11 run.py --host 0.0.0.0 --port 50021 --allow_origin "*"' >> /opt/voicevox_engine/start.sh && \
+echo 'echo ""' >> /opt/voicevox_engine/start.sh && \
+echo 'echo "=== 🔍 Checking for VoiceVox Core Libraries ==="' >> /opt/voicevox_engine/start.sh && \
+echo 'if [ ! -f "/opt/voicevox_engine/voicevox_core" ] && [ ! -f "/opt/voicevox_engine/libcore.so" ]; then' >> /opt/voicevox_engine/start.sh && \
+echo '  echo "⚠️ VoiceVox core not found, trying to use built-in core..."' >> /opt/voicevox_engine/start.sh && \
+echo '  echo "Available files:"' >> /opt/voicevox_engine/start.sh && \
+echo '  ls -la /opt/voicevox_engine/ | head -20' >> /opt/voicevox_engine/start.sh && \
+echo 'else' >> /opt/voicevox_engine/start.sh && \
+echo '  echo "✅ VoiceVox core libraries found!"' >> /opt/voicevox_engine/start.sh && \
+echo 'fi' >> /opt/voicevox_engine/start.sh && \
+echo 'echo ""' >> /opt/voicevox_engine/start.sh && \
+echo 'export VOICEVOX_CPU_NUM_THREADS=2' >> /opt/voicevox_engine/start.sh && \
+echo 'export VOICEVOX_ENABLE_MOCK=false' >> /opt/voicevox_engine/start.sh && \
+echo 'echo "🚀 Starting server with CPU mode..."' >> /opt/voicevox_engine/start.sh && \
+echo 'exec /opt/python/bin/python3.11 run.py --host 0.0.0.0 --port 50021 --allow_origin "*" --use_gpu false --cpu_num_threads 2 || /opt/python/bin/python3.11 run.py --host 0.0.0.0 --port 50021 --allow_origin "*" --use_gpu false --enable_mock' >> /opt/voicevox_engine/start.sh && \
 chmod +x /opt/voicevox_engine/start.sh
 
 # 環境変数設定
