@@ -15,11 +15,22 @@ import {
 import { VoiceBasedChannel, TextChannel, Guild } from 'discord.js'
 import fs from 'fs'
 import path from 'path'
+import dotenv from 'dotenv'
+
+// 環境変数を読み込み
+dotenv.config()
 
 // VoiceVox Web API設定
 const VOICEVOX_WEB_API_URL = 'https://deprecatedapis.tts.quest/v2/voicevox/audio/'
 const VOICEVOX_SPEAKERS_API_URL = 'https://deprecatedapis.tts.quest/v2/voicevox/speakers/'
 const VOICEVOX_API_KEY = process.env.VOICEVOX_API_KEY || '' // 環境変数から取得
+
+// デバッグログ
+console.log('🔧 VoiceVox Web API初期化:', {
+    apiKeySet: !!VOICEVOX_API_KEY,
+    apiKeyLength: VOICEVOX_API_KEY.length,
+    env: process.env.NODE_ENV
+})
 
 // 音声設定インターフェース
 interface VoiceSettings {
@@ -62,14 +73,26 @@ const messageQueues = new Map<string, string[]>()
  */
 async function getSpeakers(): Promise<any[]> {
     try {
-        const url = VOICEVOX_API_KEY 
-            ? `${VOICEVOX_SPEAKERS_API_URL}?key=${VOICEVOX_API_KEY}`
-            : VOICEVOX_SPEAKERS_API_URL
+        // APIキーが設定されていない場合はスキップ
+        if (!VOICEVOX_API_KEY) {
+            console.warn('⚠️ VoiceVox Web API: APIキーが設定されていません')
+            return []
+        }
 
-        const response = await fetch(url)
+        const url = `${VOICEVOX_SPEAKERS_API_URL}?key=${VOICEVOX_API_KEY}`
+
+        const response = await fetch(url, {
+            headers: {
+                'User-Agent': 'Discord Bot VoiceVox Integration'
+            }
+        })
         
         if (!response.ok) {
-            console.error('❌ VoiceVox Web API スピーカー取得エラー:', response.status)
+            if (response.status === 403) {
+                console.warn('⚠️ VoiceVox Web API: APIキーが無効または期限切れです')
+            } else {
+                console.warn(`⚠️ VoiceVox Web API スピーカー取得エラー: ${response.status}`)
+            }
             return []
         }
 
@@ -77,7 +100,8 @@ async function getSpeakers(): Promise<any[]> {
         console.log('✅ VoiceVox Web API スピーカー情報取得完了')
         return speakers
     } catch (error) {
-        console.error('❌ スピーカー情報取得エラー:', error)
+        const errorMessage = error instanceof Error ? error.message : String(error)
+        console.warn('⚠️ スピーカー情報取得エラー（ネットワークまたはタイムアウト）:', errorMessage)
         return []
     }
 }
@@ -474,9 +498,13 @@ export function startMessageMonitoring(client: any): void {
     })
 }
 
-// スピーカー情報を初期化時に取得
-getSpeakers().then(speakers => {
-    if (speakers.length > 0) {
-        console.log(`✅ VoiceVox Web API利用可能スピーカー: ${speakers.length}個`)
-    }
-})
+// スピーカー情報を初期化時に取得（エラーハンドリング強化）
+if (process.env.NODE_ENV !== 'deploy') {
+    getSpeakers().then(speakers => {
+        if (speakers.length > 0) {
+            console.log(`✅ VoiceVox Web API利用可能スピーカー: ${speakers.length}個`)
+        }
+    }).catch(error => {
+        console.warn('⚠️ スピーカー情報取得をスキップ（デプロイ時またはAPIエラー）:', error.message)
+    })
+}
