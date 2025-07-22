@@ -65,7 +65,7 @@ echo 'echo ""' >> /opt/voicevox_engine/start.sh && \
 echo 'export VOICEVOX_CPU_NUM_THREADS=2' >> /opt/voicevox_engine/start.sh && \
 echo 'export VOICEVOX_ENABLE_MOCK=false' >> /opt/voicevox_engine/start.sh && \
 echo 'echo "🚀 Starting server with CPU mode..."' >> /opt/voicevox_engine/start.sh && \
-echo 'exec /opt/python/bin/python3.11 run.py --host 0.0.0.0 --port 50021 --allow_origin "*" --use_gpu false --cpu_num_threads 2 || /opt/python/bin/python3.11 run.py --host 0.0.0.0 --port 50021 --allow_origin "*" --use_gpu false --enable_mock' >> /opt/voicevox_engine/start.sh && \
+echo 'exec /opt/python/bin/python3.11 run.py --host 0.0.0.0 --port 50021 --allow_origin "*" --cpu_num_threads 2 || /opt/python/bin/python3.11 run.py --host 0.0.0.0 --port 50021 --allow_origin "*" --enable_mock' >> /opt/voicevox_engine/start.sh && \
 chmod +x /opt/voicevox_engine/start.sh
 
 # 環境変数設定
