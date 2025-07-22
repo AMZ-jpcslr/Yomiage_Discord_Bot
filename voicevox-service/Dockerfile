@@ -18,7 +18,7 @@ echo 'echo ""' >> /opt/voicevox_engine/start.sh && \
 echo 'echo "=== Installing Core Dependencies ==="' >> /opt/voicevox_engine/start.sh && \
 echo '/opt/python/bin/python3.11 -m pip install --no-warn-script-location --disable-pip-version-check semver platformdirs fastapi uvicorn pydantic jinja2 PyYAML --quiet' >> /opt/voicevox_engine/start.sh && \
 echo '/opt/python/bin/python3.11 -m pip install --no-warn-script-location --disable-pip-version-check numpy scipy soxr soundfile requests aiofiles --quiet' >> /opt/voicevox_engine/start.sh && \
-echo '/opt/python/bin/python3.11 -m pip install --no-warn-script-location --disable-pip-version-check python-multipart typing-extensions pyopenjtalk --quiet' >> /opt/voicevox_engine/start.sh && \
+echo '/opt/python/bin/python3.11 -m pip install --no-warn-script-location --disable-pip-version-check python-multipart typing-extensions pyopenjtalk pyworld --quiet' >> /opt/voicevox_engine/start.sh && \
 echo 'echo "✅ Core dependencies installed"' >> /opt/voicevox_engine/start.sh && \
 echo 'echo ""' >> /opt/voicevox_engine/start.sh && \
 echo 'echo "=== Module Verification ==="' >> /opt/voicevox_engine/start.sh && \
@@ -27,6 +27,7 @@ echo '/opt/python/bin/python3.11 -c "import platformdirs; print(\"platformdirs: 
 echo '/opt/python/bin/python3.11 -c "import soxr; print(\"soxr: OK\")" 2>/dev/null || echo "soxr: FAILED"' >> /opt/voicevox_engine/start.sh && \
 echo '/opt/python/bin/python3.11 -c "import soundfile; print(\"soundfile: OK\")" 2>/dev/null || echo "soundfile: FAILED"' >> /opt/voicevox_engine/start.sh && \
 echo '/opt/python/bin/python3.11 -c "import pyopenjtalk; print(\"pyopenjtalk: OK\")" 2>/dev/null || echo "pyopenjtalk: FAILED"' >> /opt/voicevox_engine/start.sh && \
+echo '/opt/python/bin/python3.11 -c "import pyworld; print(\"pyworld: OK\")" 2>/dev/null || echo "pyworld: FAILED"' >> /opt/voicevox_engine/start.sh && \
 echo '/opt/python/bin/python3.11 -c "import fastapi; print(\"FastAPI: OK\")" 2>/dev/null || echo "FastAPI: FAILED"' >> /opt/voicevox_engine/start.sh && \
 echo '/opt/python/bin/python3.11 -c "import uvicorn; print(\"Uvicorn: OK\")" 2>/dev/null || echo "Uvicorn: FAILED"' >> /opt/voicevox_engine/start.sh && \
 echo '/opt/python/bin/python3.11 -c "import jinja2; print(\"Jinja2: OK\")" 2>/dev/null || echo "Jinja2: FAILED"' >> /opt/voicevox_engine/start.sh && \
