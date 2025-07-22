@@ -1,20 +1,22 @@
 # 🚨 VoiceVox Railway クラッシュ問題解決ガイド
 
-## ❌ 問題: "更新が多すぎてクラッシュした"
+## 🚨 VoiceVox Railway クラッシュ問題解決ガイド（緊急版）
 
-### 症状:
-- VoiceVoxサービスが起動後すぐに停止
-- Railway Logs に "too many updates" 系のエラー
-- サービスが自動的に再起動を繰り返す
+## ❌ 緊急問題: **利用規約の大量出力でクラッシュ**
 
-### 原因:
-1. **ログ出力過多** - VoiceVoxエンジンの詳細ログがRailway制限を超過
-2. **リソース不足** - メモリ/CPU不足による不安定性
-3. **ヘルスチェック失敗** - 起動時間が長すぎてタイムアウト
+### 新たな症状:
+- VoiceVoxエンジンが起動時に**利用規約を大量出力**
+- 「四国めたん」「冥鳴ひまり」「九州そら」等の規約テキストが連続表示
+- Railway Logsが制限を超えて **即座にクラッシュ**
+
+### 根本原因:
+**VOICEVOXエンジンv0.18以降の仕様変更** - 起動時に全ライブラリの利用規約を出力するように
 
 ---
 
-## 🔧 解決方法
+## 🔧 緊急解決方法
+
+### **🚨 即座実行: 完全サイレント化対応**
 
 ### **方法1: 最適化されたDockerfile使用（推奨）**
 
@@ -26,12 +28,34 @@ voicevox-service/Dockerfile.stable # 安定版（バックアップ）
 voicevox-service/railway.yml     # リソース設定最適化
 ```
 
-#### ステップ2: 変更をコミット・デプロイ
+#### ステップ1: **緊急修正版をデプロイ**
 ```powershell
+# 最新の完全サイレント化版を確認
 cd "c:\Users\yomas\Github\OWN_Discord_Bot"
-powershell -ExecutionPolicy Bypass -Command "git add voicevox-service/"
-powershell -ExecutionPolicy Bypass -Command "git commit -m 'fix: Optimize VoiceVox for Railway stability'"
-powershell -ExecutionPolicy Bypass -Command "git push origin master"
+git add voicevox-service/
+git commit -m "🚨 EMERGENCY: Complete silent VoiceVox to fix terms-of-use crash"
+git push origin master
+```
+
+**重要:** この修正版は利用規約出力を**完全に抑制**します
+
+#### ステップ2: **Railway即座確認**
+1. **Railway Dashboard** → **VoiceVoxサービス**
+2. 新しいDeploymentが開始されることを確認
+3. **5分以内に「Success」** になることを確認
+
+### **📋 今回の修正内容:**
+```dockerfile
+# 🚨 新規追加: 利用規約出力完全抑制
+RUN echo '#!/bin/bash
+/usr/bin/python3 run.py --host 0.0.0.0 --port 50021 \
+  --allow_origin "*" --disable_mutable_api --cpu_num_threads 1 \
+  --log_level ERROR 2>/dev/null | \
+  grep -v "利用規約\|Terms\|規約\|ライブラリ\|クレジット" || true' \
+  > /opt/voicevox_engine/start_silent.sh
+
+# 完全サイレント起動
+CMD ["/bin/bash", "/opt/voicevox_engine/start_silent.sh"]
 ```
 
 ### **方法2: より安定なDockerfile使用（問題継続時）**
