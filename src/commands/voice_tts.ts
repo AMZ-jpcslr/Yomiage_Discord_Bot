@@ -54,12 +54,12 @@ export const data = new SlashCommandBuilder()
                     .setName('speaker')
                     .setDescription('音声モデルを選択')
                     .addChoices(
-                        { name: 'ずんだもん（ノーマル）', value: '3' },
-                        { name: 'ずんだもん（あまあま）', value: '1' },
-                        { name: 'ずんだもん（ツンツン）', value: '7' },
                         { name: '四国めたん（ノーマル）', value: '2' },
                         { name: '四国めたん（あまあま）', value: '0' },
                         { name: '四国めたん（ツンツン）', value: '6' },
+                        { name: 'ずんだもん（ノーマル）', value: '3' },
+                        { name: 'ずんだもん（あまあま）', value: '1' },
+                        { name: 'ずんだもん（ツンツン）', value: '7' },
                         { name: '春日部つむぎ（ノーマル）', value: '8' },
                         { name: '波音リツ（ノーマル）', value: '9' },
                         { name: '雨晴はう（ノーマル）', value: '10' },
@@ -70,7 +70,7 @@ export const data = new SlashCommandBuilder()
             .addNumberOption(option =>
                 option
                     .setName('speed')
-                    .setDescription('読み上げ速度（0.5〜2.0、デフォルト: 1.0）')
+                    .setDescription('読み上げ速度（0.5〜2.0、デフォルト: 0.8）')
                     .setMinValue(0.5)
                     .setMaxValue(2.0)
                     .setRequired(false)

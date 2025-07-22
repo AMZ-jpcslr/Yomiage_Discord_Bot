@@ -71,8 +71,8 @@ interface EnhancedVoiceSettings extends VoiceSettings {
 
 // デフォルト音声設定
 const DEFAULT_VOICE_SETTINGS: VoiceSettings = {
-    speakerId: 3, // ずんだもん（ノーマル）
-    speed: 1.0,   // 通常速度
+    speakerId: 2, // 四国めたん（ノーマル）- VoiceVoxの基本音声
+    speed: 0.8,   // ゆっくりめの速度（0.8倍速）
     pitch: 0.0    // 通常音程
 }
 
