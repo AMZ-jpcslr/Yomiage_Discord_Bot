@@ -1,7 +1,7 @@
 # Discord Bot for Railway Deployment
 FROM node:18-alpine
 
-# Install canvas dependencies for Alpine Linux
+# Install canvas dependencies and FFmpeg for Alpine Linux
 RUN apk add --no-cache \
     cairo-dev \
     jpeg-dev \
@@ -14,7 +14,10 @@ RUN apk add --no-cache \
     freetype-dev \
     python3 \
     make \
-    g++
+    g++ \
+    ffmpeg \
+    opus-dev \
+    libsodium-dev
 
 # Set working directory
 WORKDIR /app
