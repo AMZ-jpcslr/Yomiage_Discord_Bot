@@ -72,19 +72,24 @@ const DEFAULT_VOICE_SETTINGS: VoiceSettings = {
 }
 
 // 音声チャンネル設定ファイル
-const VOICE_CONFIG_FILE = path.resolve(__dirname, '../data/voice_tts_config.json')
+const VOICE_CONFIG_FILE = path.resolve(__dirname, '../data/voice_channels.json')
 
 /**
  * 音声チャンネル設定を読み込み
  */
 function loadVoiceChannelConfig(): VoiceChannelConfig {
     try {
+        console.log(`📁 設定ファイル読み込み: ${VOICE_CONFIG_FILE}`)
         if (fs.existsSync(VOICE_CONFIG_FILE)) {
             const data = fs.readFileSync(VOICE_CONFIG_FILE, 'utf8')
-            return JSON.parse(data)
+            const config = JSON.parse(data)
+            console.log(`✅ 設定ファイル読み込み完了:`, config)
+            return config
+        } else {
+            console.log(`⚠️ 設定ファイルが見つかりません: ${VOICE_CONFIG_FILE}`)
         }
     } catch (error) {
-        console.error('音声チャンネル設定の読み込みエラー:', error)
+        console.error('❌ 音声チャンネル設定の読み込みエラー:', error)
     }
     return {}
 }
@@ -95,11 +100,14 @@ function loadVoiceChannelConfig(): VoiceChannelConfig {
 function saveVoiceChannelConfig(config: VoiceChannelConfig): void {
     try {
         const dir = path.dirname(VOICE_CONFIG_FILE)
+        console.log(`📁 設定ディレクトリ確認: ${dir}`)
         if (!fs.existsSync(dir)) {
             fs.mkdirSync(dir, { recursive: true })
+            console.log(`✅ 設定ディレクトリ作成: ${dir}`)
         }
         fs.writeFileSync(VOICE_CONFIG_FILE, JSON.stringify(config, null, 2))
-        console.log('✅ 音声チャンネル設定保存完了')
+        console.log(`✅ 音声チャンネル設定保存完了: ${VOICE_CONFIG_FILE}`)
+        console.log(`💾 保存された設定:`, config)
     } catch (error) {
         console.error('❌ 音声チャンネル設定の保存エラー:', error)
     }
@@ -128,13 +136,30 @@ export function removeVoiceChannelConfig(guildId: string): void {
  */
 export function updateVoiceSettings(guildId: string, settings: Partial<VoiceSettings>): void {
     const config = loadVoiceChannelConfig()
-    if (config[guildId]) {
-        if (settings.speakerId !== undefined) config[guildId].speakerId = settings.speakerId
-        if (settings.speed !== undefined) config[guildId].speed = settings.speed
-        if (settings.pitch !== undefined) config[guildId].pitch = settings.pitch
-        saveVoiceChannelConfig(config)
-        console.log(`✅ 音声設定更新: ${guildId}`, settings)
+    
+    // ギルド設定が存在しない場合は作成
+    if (!config[guildId]) {
+        config[guildId] = {
+            voiceChannelId: '',
+            textChannelId: '',
+            speakerId: DEFAULT_VOICE_SETTINGS.speakerId,
+            speed: DEFAULT_VOICE_SETTINGS.speed,
+            pitch: DEFAULT_VOICE_SETTINGS.pitch
+        }
     }
+    
+    // 設定を更新
+    if (settings.speakerId !== undefined) config[guildId].speakerId = settings.speakerId
+    if (settings.speed !== undefined) config[guildId].speed = settings.speed
+    if (settings.pitch !== undefined) config[guildId].pitch = settings.pitch
+    
+    saveVoiceChannelConfig(config)
+    console.log(`✅ 音声設定更新: ${guildId}`, settings)
+    console.log(`🎵 現在の設定:`, {
+        speakerId: config[guildId].speakerId,
+        speed: config[guildId].speed,
+        pitch: config[guildId].pitch
+    })
 }
 
 /**
