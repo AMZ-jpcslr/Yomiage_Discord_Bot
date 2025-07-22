@@ -11,11 +11,9 @@ import * as setEqChannelCommand from './commands/set_eq_channel'
 import * as getEqCommand from './commands/get_eq'  // 新しい実装
 import * as setMinIntensityCommand from './commands/set_min_intensity'  // 最低震度設定
 import * as showMinIntensityCommand from './commands/show_min_intensity'  // 最低震度確認
-import * as voiceTtsCommand from './commands/voice_tts'  // VoiceVox音声読み上げ
 import * as voiceWebCommand from './commands/voice_web'  // VoiceVox Web API読み上げ
 import dotenv from 'dotenv'
 import { monitorP2PEarthquakeAlerts } from './p2p_notify'  // P2P地震情報通知システム
-import { startMessageMonitoring } from './voice_tts'  // 音声読み上げ機能
 import { startMessageMonitoring as startWebMessageMonitoring } from './voice_web_api'  // Web API音声読み上げ
 import * as http from 'http'
 
@@ -25,9 +23,7 @@ dotenv.config()
 console.log('=== Discord地震速報ボット起動開始 ===')
 console.log('NODE_ENV:', process.env.NODE_ENV)
 console.log('TOKEN確認:', process.env.DISCORD_TOKEN ? '✅ 設定済み' : '❌ 未設定')
-console.log('FORCE_MAP_GENERATION:', process.env.FORCE_MAP_GENERATION)
-console.log('SKIP_MAP_GENERATION:', process.env.SKIP_MAP_GENERATION)
-console.log('VOICEVOX_ENABLED:', process.env.VOICEVOX_ENABLED)
+console.log('VOICEVOX_API_KEY確認:', process.env.VOICEVOX_API_KEY ? '✅ 設定済み' : '❌ 未設定')
 
 const client = new Client({
     intents: [
@@ -135,9 +131,6 @@ client.on('interactionCreate', async interaction => {
             case 'show_min_intensity':
                 await showMinIntensityCommand.execute(interaction)
                 break
-            case 'voice_tts':
-                await voiceTtsCommand.execute(interaction)
-                break
             case 'voice_web':
                 await voiceWebCommand.execute(interaction)
                 break
@@ -167,8 +160,6 @@ client.once('ready', async () => {
     // 環境情報表示
     console.log('=== 環境情報 ===')
     console.log('NODE_ENV:', process.env.NODE_ENV)
-    console.log('FORCE_MAP_GENERATION:', process.env.FORCE_MAP_GENERATION)
-    console.log('SKIP_MAP_GENERATION:', process.env.SKIP_MAP_GENERATION)
     console.log('プラットフォーム:', process.platform)
     console.log('Node.js バージョン:', process.version)
 
@@ -194,10 +185,6 @@ client.once('ready', async () => {
     // P2P地震情報監視システムを開始
     console.log('🚨 P2P地震情報監視システム開始...')
     monitorP2PEarthquakeAlerts(client)
-    
-    // VoiceVox音声読み上げ監視を開始
-    console.log('🎤 VoiceVox音声読み上げ監視開始...')
-    startMessageMonitoring(client)
     
     // VoiceVox Web API音声読み上げ監視を開始  
     console.log('🌐 VoiceVox Web API音声読み上げ監視開始...')

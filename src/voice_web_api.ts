@@ -493,8 +493,10 @@ export function startMessageMonitoring(client: any): void {
         // コマンドは無視
         if (message.content.startsWith('/') || message.content.startsWith('!')) return
         
-        // メッセージを音声で読み上げ
-        await speakTextWeb(message.content, message.guild.id)
+        // ユーザー名 + メッセージ内容を音声で読み上げ
+        const userDisplayName = message.member?.displayName || message.author.displayName || message.author.username || 'ユーザー'
+        const textToSpeak = `${userDisplayName}さん、${message.content}`
+        await speakTextWeb(textToSpeak, message.guild.id)
     })
 }
 

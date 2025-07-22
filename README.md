@@ -8,7 +8,7 @@
 - `/set_eq_channel` で自動通知チャンネルを設定
 - `/set_min_intensity` で通知する最低震度を設定（チャンネル別）
 - `/show_min_intensity` で現在の最低震度設定を確認
-- `/voice_tts` でVoiceVoxずんだもん音声読み上げ機能
+- `/voice_web` でVoiceVox Web API音声読み上げ機能
 - 震度画像とカスタム地震マップを表示
 - 各観測点の震度を地図上にプロット
 - P2P地震情報APIを使用したリアルタイム通知
@@ -23,9 +23,10 @@
 | `/set_eq_channel` | 地震通知チャンネルを設定 | 管理者 |
 | `/set_min_intensity` | 通知する最低震度を設定 | なし |
 | `/show_min_intensity` | 最低震度設定を確認 | なし |
-| `/voice_tts join` | ボイスチャンネルで音声読み上げ開始 | なし |
-| `/voice_tts leave` | 音声読み上げ停止・切断 | なし |
-| `/voice_tts status` | 音声読み上げ設定確認 | なし |
+| `/voice_web join` | ボイスチャンネルで音声読み上げ開始 | なし |
+| `/voice_web leave` | 音声読み上げ停止・切断 | なし |
+| `/voice_web settings` | 音声設定変更（速度・音程・音声モデル） | なし |
+| `/voice_web status` | API設定状況確認 | なし |
 | `/ping` | ボットの応答確認 | なし |
 | `/lottery` | 抽選機能 | なし |
 | `/shift` | シフト表 | なし |
