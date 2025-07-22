@@ -162,9 +162,9 @@ function shouldSendNotification(id: string, isIncomplete: boolean = false): bool
     
     // 1分以内の重複チェック
     if (timeDiff < 60 * 1000) {
-        // 前回が不完全で今回が完全情報の場合は更新として送信
+        // 注意: 現在は不完全データは通知しないため、この分岐は基本的に実行されない
         if (lastData.isIncomplete && !isIncomplete) {
-            console.log(`更新情報: ${id} - 不完全→完全情報への更新`)
+            console.log(`更新情報: ${id} - 不完全→完全情報への更新（現在は不完全データは通知されません）`)
             return true
         }
         
@@ -276,12 +276,22 @@ async function connectP2PEarthquakeWebSocket(client: Client): Promise<void> {
                 // 不完全データかどうかを判定
                 const isIncomplete = isIncompleteEarthquakeData(p2pData)
                 
-                // 通知すべきかチェック（更新情報も考慮）
+                // 不完全データの場合は通知をスキップ
+                if (isIncomplete) {
+                    console.log(`⏭️ 不完全な地震情報のため通知をスキップ: ID ${p2pData.id}`)
+                    console.log(`- 震源地: ${p2pData.earthquake?.hypocenter?.name || '不明'}`)
+                    console.log(`- マグニチュード: M${p2pData.earthquake?.hypocenter?.magnitude || '不明'}`)
+                    console.log(`- 座標: ${p2pData.earthquake?.hypocenter?.longitude || '不明'}, ${p2pData.earthquake?.hypocenter?.latitude || '不明'}`)
+                    console.log(`- 震度分布: ${p2pData.points?.length || 0}地点`)
+                    return
+                }
+                
+                // 通知すべきかチェック（重複確認）
                 if (!shouldSendNotification(p2pData.id, isIncomplete)) {
                     return
                 }
                 
-                console.log('🚨 新しい地震情報を検出（WebSocket）!')
+                console.log('🚨 完全な地震情報を検出（WebSocket）!')
                 console.log(`ID: ${p2pData.id}`)
                 console.log(`コード: ${p2pData.code}`)
                 console.log(`種別: ${P2P_CODES[p2pData.code as keyof typeof P2P_CODES] || '未知'}`)
@@ -293,7 +303,7 @@ async function connectP2PEarthquakeWebSocket(client: Client): Promise<void> {
                     console.log(`最大震度: ${p2pData.earthquake.maxScale || '不明'}`)
                 }
                 
-                // 地震情報の処理とDiscord通知
+                // 完全な地震情報の処理とDiscord通知
                 await sendP2PNotification(client, p2pData, isIncomplete)
                 
             } catch (parseError) {
@@ -369,12 +379,22 @@ async function fallbackP2PHttpPolling(client: Client): Promise<void> {
                 // 不完全データかどうかを判定
                 const isIncomplete = isIncompleteEarthquakeData(p2pData)
                 
+                // 不完全データの場合は通知をスキップ
+                if (isIncomplete) {
+                    console.log(`⏭️ 不完全な地震情報のため通知をスキップ（HTTP）: ID ${p2pData.id}`)
+                    console.log(`- 震源地: ${p2pData.earthquake?.hypocenter?.name || '不明'}`)
+                    console.log(`- マグニチュード: M${p2pData.earthquake?.hypocenter?.magnitude || '不明'}`)
+                    console.log(`- 座標: ${p2pData.earthquake?.hypocenter?.longitude || '不明'}, ${p2pData.earthquake?.hypocenter?.latitude || '不明'}`)
+                    console.log(`- 震度分布: ${p2pData.points?.length || 0}地点`)
+                    continue
+                }
+                
                 // 重複チェック
                 if (!shouldSendNotification(p2pData.id, isIncomplete)) {
                     continue
                 }
                 
-                console.log('=== 新しい地震情報を検出（HTTPポーリング） ===')
+                console.log('=== 完全な地震情報を検出（HTTPポーリング） ===')
                 console.log(`ID: ${p2pData.id}`)
                 console.log(`コード: ${p2pData.code}`)
                 console.log(`種別: ${P2P_CODES[p2pData.code as keyof typeof P2P_CODES] || '未知'}`)
@@ -385,7 +405,7 @@ async function fallbackP2PHttpPolling(client: Client): Promise<void> {
                     console.log(`マグニチュード: M${p2pData.earthquake.hypocenter.magnitude || '不明'}`)
                 }
                 
-                // 地震情報の処理とDiscord通知
+                // 完全な地震情報の処理とDiscord通知
                 await sendP2PNotification(client, p2pData, isIncomplete)
             }
             
