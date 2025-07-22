@@ -8,6 +8,7 @@ import { data as getEqData } from './commands/get_eq'
 import { data as setMinIntensityData } from './commands/set_min_intensity'
 import { data as showMinIntensityData } from './commands/show_min_intensity'
 import { data as voiceTtsData } from './commands/voice_tts'
+import { data as voiceWebData } from './commands/voice_web'
 
 dotenv.config()
 
@@ -20,6 +21,7 @@ const commands = [
     setMinIntensityData.toJSON(),
     showMinIntensityData.toJSON(),
     voiceTtsData.toJSON(),
+    voiceWebData.toJSON(),
 ]
 
 const rest = new REST({ version: '10' }).setToken(process.env.TOKEN as string)

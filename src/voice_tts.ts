@@ -72,8 +72,8 @@ interface EnhancedVoiceSettings extends VoiceSettings {
 // デフォルト音声設定
 const DEFAULT_VOICE_SETTINGS: VoiceSettings = {
     speakerId: 2, // 四国めたん（ノーマル）- VoiceVoxの基本音声
-    speed: 0.8,   // ゆっくりめの速度（0.8倍速）
-    pitch: 0.0    // 通常音程
+    speed: 0.85,  // 自然な速度（0.85倍速）
+    pitch: 0.02   // わずかに高めの音程でより自然に
 }
 
 /**
@@ -82,70 +82,70 @@ const DEFAULT_VOICE_SETTINGS: VoiceSettings = {
 function enhanceVoiceSettings(settings: VoiceSettings): EnhancedVoiceSettings {
     const enhanced: EnhancedVoiceSettings = { ...settings }
     
-    // Speaker IDに応じて音声特性を調整
+    // Speaker IDに応じて音声特性を調整（より自然なイントネーション）
     switch (settings.speakerId) {
         case 0: // 四国めたん（あまあま）
-            enhanced.pitch = settings.pitch + 0.05
+            enhanced.pitch = settings.pitch + 0.03
             enhanced.speed = settings.speed * 0.95
-            enhanced.intonation = 1.1
+            enhanced.intonation = 1.2  // より豊かなイントネーション
             enhanced.volume = 1.0
             break
         case 1: // ずんだもん（あまあま）
-            enhanced.pitch = settings.pitch + 0.03
-            enhanced.speed = settings.speed * 0.9
-            enhanced.intonation = 1.05
+            enhanced.pitch = settings.pitch + 0.02
+            enhanced.speed = settings.speed * 0.92
+            enhanced.intonation = 1.15 // 自然な抑揚
             enhanced.volume = 0.95
             break
         case 2: // 四国めたん（ノーマル）
-            enhanced.pitch = settings.pitch + 0.02
+            enhanced.pitch = settings.pitch + 0.01
             enhanced.speed = settings.speed * 1.0
-            enhanced.intonation = 1.0
+            enhanced.intonation = 1.1   // より自然なイントネーション
             enhanced.volume = 1.0
             break
         case 3: // ずんだもん（ノーマル）
             enhanced.pitch = settings.pitch + 0.0
             enhanced.speed = settings.speed * 1.0
-            enhanced.intonation = 1.0
+            enhanced.intonation = 1.08  // 適度な抑揚
             enhanced.volume = 1.0
             break
         case 6: // 四国めたん（ツンツン）
-            enhanced.pitch = settings.pitch + 0.08
-            enhanced.speed = settings.speed * 1.1
-            enhanced.intonation = 1.2
-            enhanced.volume = 1.05
-            break
-        case 7: // ずんだもん（ツンツン）
             enhanced.pitch = settings.pitch + 0.06
             enhanced.speed = settings.speed * 1.05
-            enhanced.intonation = 1.15
+            enhanced.intonation = 1.3   // はっきりした抑揚
             enhanced.volume = 1.02
             break
+        case 7: // ずんだもん（ツンツン）
+            enhanced.pitch = settings.pitch + 0.04
+            enhanced.speed = settings.speed * 1.02
+            enhanced.intonation = 1.25  // 明確な抑揚
+            enhanced.volume = 1.0
+            break
         case 8: // 春日部つむぎ
-            enhanced.pitch = settings.pitch - 0.02
+            enhanced.pitch = settings.pitch - 0.01
             enhanced.speed = settings.speed * 0.98
-            enhanced.intonation = 0.95
+            enhanced.intonation = 1.05  // 落ち着いた抑揚
             enhanced.volume = 1.0
             break
         case 9: // 波音リツ
-            enhanced.pitch = settings.pitch - 0.05
-            enhanced.speed = settings.speed * 1.02
-            enhanced.intonation = 0.9
+            enhanced.pitch = settings.pitch - 0.03
+            enhanced.speed = settings.speed * 1.0
+            enhanced.intonation = 1.0   // 標準的な抑揚
             enhanced.volume = 1.0
             break
         case 10: // 雨晴はう
-            enhanced.pitch = settings.pitch + 0.04
-            enhanced.speed = settings.speed * 0.92
-            enhanced.intonation = 1.08
+            enhanced.pitch = settings.pitch + 0.02
+            enhanced.speed = settings.speed * 0.94
+            enhanced.intonation = 1.18  // 柔らかい抑揚
             enhanced.volume = 0.98
             break
         case 11: // 玄野武宏
-            enhanced.pitch = settings.pitch - 0.08
-            enhanced.speed = settings.speed * 1.08
-            enhanced.intonation = 0.85
-            enhanced.volume = 1.1
+            enhanced.pitch = settings.pitch - 0.04
+            enhanced.speed = settings.speed * 1.05
+            enhanced.intonation = 0.95  // 低めでしっかりした抑揚
+            enhanced.volume = 1.05
             break
         default:
-            enhanced.intonation = 1.0
+            enhanced.intonation = 1.1   // デフォルトでも自然な抑揚
             enhanced.volume = 1.0
     }
     
@@ -345,42 +345,64 @@ async function applyVoiceEffects(inputPath: string, settings: EnhancedVoiceSetti
             filters.push(`volume=${settings.volume}`)
         }
         
-        // 抑揚/音質調整 (intonation) - EQで模擬
+        // 抑揚/音質調整 (intonation) - より自然なEQ設定
         if (settings.intonation && settings.intonation !== 1.0) {
             if (settings.intonation > 1.0) {
-                // 抑揚を強くする - 高音域を強調
-                filters.push(`equalizer=f=2000:width_type=h:width=1000:g=${(settings.intonation - 1.0) * 6}`)
+                // 抑揚を強くする - 高音域を緩やかに強調、低音域も調整
+                const gain = (settings.intonation - 1.0) * 4
+                filters.push(`equalizer=f=1800:width_type=h:width=800:g=${gain}`)
+                filters.push(`equalizer=f=400:width_type=h:width=200:g=${gain * 0.3}`)
             } else {
-                // 抑揚を弱くする - 中音域を強調
-                filters.push(`equalizer=f=1000:width_type=h:width=800:g=${(1.0 - settings.intonation) * 4}`)
+                // 抑揚を弱くする - 中音域を強調し、バランス調整
+                const gain = (1.0 - settings.intonation) * 3
+                filters.push(`equalizer=f=1000:width_type=h:width=600:g=${gain}`)
             }
         }
+
+        // 全体的になめらかさを向上させるフィルター
+        filters.push('acompressor=threshold=0.5:ratio=2:attack=5:release=50') // 軽い圧縮
+        filters.push('highpass=f=80') // 低音ノイズ除去
+        filters.push('lowpass=f=8000') // 高音ハーシュネス除去
         
-        // Character-specific voice effects
+        // Character-specific voice effects（より自然な設定）
         switch (settings.speakerId) {
             case 0: // 四国めたん（あまあま）
-                filters.push('equalizer=f=800:width_type=h:width=200:g=3') // 柔らかい音質
+                filters.push('equalizer=f=800:width_type=h:width=300:g=2') // 暖かい音質
+                filters.push('equalizer=f=3000:width_type=h:width=500:g=1') // 明瞭さ向上
                 break
             case 1: // ずんだもん（あまあま）
-                filters.push('equalizer=f=1200:width_type=h:width=300:g=2')
+                filters.push('equalizer=f=1000:width_type=h:width=400:g=1.5')
+                filters.push('equalizer=f=2500:width_type=h:width=400:g=1')
+                break
+            case 2: // 四国めたん（ノーマル）
+                filters.push('equalizer=f=1200:width_type=h:width=500:g=1') // バランス良く
+                break
+            case 3: // ずんだもん（ノーマル）
+                filters.push('equalizer=f=1100:width_type=h:width=450:g=1')
                 break
             case 6: // 四国めたん（ツンツン）
-                filters.push('equalizer=f=2500:width_type=h:width=500:g=4') // 鋭い音質
+                filters.push('equalizer=f=2200:width_type=h:width=600:g=2.5') // はっきりした音質
+                filters.push('equalizer=f=600:width_type=h:width=200:g=-0.5') // 低音抑制
                 break
             case 7: // ずんだもん（ツンツン）
-                filters.push('equalizer=f=2000:width_type=h:width=400:g=3')
+                filters.push('equalizer=f=2000:width_type=h:width=500:g=2')
+                filters.push('equalizer=f=500:width_type=h:width=150:g=-0.3')
                 break
             case 8: // 春日部つむぎ
-                filters.push('equalizer=f=600:width_type=h:width=150:g=2') // 落ち着いた音質
+                filters.push('equalizer=f=700:width_type=h:width=250:g=1.5') // 落ち着いた音質
+                filters.push('equalizer=f=1800:width_type=h:width=300:g=0.8')
                 break
             case 9: // 波音リツ
-                filters.push('equalizer=f=400:width_type=h:width=100:g=3') // 低音強調
+                filters.push('equalizer=f=450:width_type=h:width=150:g=2') // 低音強調
+                filters.push('equalizer=f=1600:width_type=h:width=400:g=0.5')
                 break
             case 10: // 雨晴はう
-                filters.push('equalizer=f=1500:width_type=h:width=350:g=2.5')
+                filters.push('equalizer=f=1300:width_type=h:width=400:g=1.5')
+                filters.push('equalizer=f=2800:width_type=h:width=300:g=1')
                 break
             case 11: // 玄野武宏
-                filters.push('equalizer=f=300:width_type=h:width=80:g=5') // 男性的な低音
+                filters.push('equalizer=f=350:width_type=h:width=120:g=3') // 男性的な低音
+                filters.push('equalizer=f=1500:width_type=h:width=300:g=-1') // 高音抑制
                 break
         }
         
@@ -453,11 +475,28 @@ async function synthesizeVoice(text: string, guildId: string): Promise<Buffer | 
         
         const audioQuery = await queryResponse.json()
         
-        // 強化された音声設定を適用
+        // 強化された音声設定を適用（より自然なパラメータ）
         audioQuery.speedScale = enhancedSettings.speed
         audioQuery.pitchScale = enhancedSettings.pitch
-        audioQuery.intonationScale = enhancedSettings.intonation || 1.0
+        audioQuery.intonationScale = enhancedSettings.intonation || 1.1  // デフォルトで少し豊かに
         audioQuery.volumeScale = enhancedSettings.volume || 1.0
+        
+        // より自然な音声のための細かい調整
+        if (audioQuery.accent_phrases) {
+            audioQuery.accent_phrases.forEach((phrase: any) => {
+                if (phrase.moras) {
+                    phrase.moras.forEach((mora: any) => {
+                        // 音素の長さを微調整してより自然に
+                        if (mora.consonant_length) {
+                            mora.consonant_length *= 0.95 // 子音を少し短く
+                        }
+                        if (mora.vowel_length) {
+                            mora.vowel_length *= 1.05 // 母音を少し長く
+                        }
+                    })
+                }
+            })
+        }
         
         // 音声合成を実行
         const synthesisResponse = await fetch(`${VOICEVOX_API_URL}/synthesis?speaker=${enhancedSettings.speakerId}`, {

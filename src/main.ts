@@ -12,9 +12,11 @@ import * as getEqCommand from './commands/get_eq'  // 新しい実装
 import * as setMinIntensityCommand from './commands/set_min_intensity'  // 最低震度設定
 import * as showMinIntensityCommand from './commands/show_min_intensity'  // 最低震度確認
 import * as voiceTtsCommand from './commands/voice_tts'  // VoiceVox音声読み上げ
+import * as voiceWebCommand from './commands/voice_web'  // VoiceVox Web API読み上げ
 import dotenv from 'dotenv'
 import { monitorP2PEarthquakeAlerts } from './p2p_notify'  // P2P地震情報通知システム
 import { startMessageMonitoring } from './voice_tts'  // 音声読み上げ機能
+import { startMessageMonitoring as startWebMessageMonitoring } from './voice_web_api'  // Web API音声読み上げ
 import * as http from 'http'
 
 dotenv.config()
@@ -136,6 +138,9 @@ client.on('interactionCreate', async interaction => {
             case 'voice_tts':
                 await voiceTtsCommand.execute(interaction)
                 break
+            case 'voice_web':
+                await voiceWebCommand.execute(interaction)
+                break
             default:
                 await interaction.reply({ content: 'コマンドが見つかりません。', ephemeral: true })
         }
@@ -193,6 +198,10 @@ client.once('ready', async () => {
     // VoiceVox音声読み上げ監視を開始
     console.log('🎤 VoiceVox音声読み上げ監視開始...')
     startMessageMonitoring(client)
+    
+    // VoiceVox Web API音声読み上げ監視を開始  
+    console.log('🌐 VoiceVox Web API音声読み上げ監視開始...')
+    startWebMessageMonitoring(client)
 })
 
 // エラーハンドリング

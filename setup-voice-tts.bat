@@ -39,8 +39,19 @@ if %errorlevel% equ 0 (
 )
 
 echo.
-echo 📚 詳細なセットアップガイド: VOICE_TTS_SETUP.md
-echo 🎯 使用方法: /voice_tts join コマンドでボイスチャンネルに接続
+echo 📚 詳細なセットアップガイド: 
+echo   • ローカルVoiceVox: VOICE_TTS_SETUP.md
+echo   • VoiceVox Web API: VOICE_WEB_API_SETUP.md
+echo 🎯 使用方法: 
+echo   • ローカル版: /voice_tts join コマンドでボイスチャンネルに接続
+echo   • Web API版: /voice_web join コマンドでボイスチャンネルに接続
+echo.
+echo 💡 推奨: VoiceVox Web APIを使用すればサーバー設定不要で高速です！
+echo    APIキー取得: https://su-shiki.com/api/
+echo    設定済みAPIキー: h4824358C3Q-122 (環境変数VOICEVOX_API_KEYに設定済み)
+echo.
+echo ✅ テスト方法: node test_voicevox_web_api.js でAPI動作確認
+echo 🚀 すぐに使用開始: /voice_web join コマンドでボイスチャンネルに参加
 echo.
 echo === セットアップ完了 ===
 pause

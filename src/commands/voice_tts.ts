@@ -70,7 +70,7 @@ export const data = new SlashCommandBuilder()
             .addNumberOption(option =>
                 option
                     .setName('speed')
-                    .setDescription('読み上げ速度（0.5〜2.0、デフォルト: 0.8）')
+                    .setDescription('読み上げ速度（0.5〜2.0、デフォルト: 0.85）')
                     .setMinValue(0.5)
                     .setMaxValue(2.0)
                     .setRequired(false)
