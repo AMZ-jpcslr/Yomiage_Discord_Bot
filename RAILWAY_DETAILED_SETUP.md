@@ -63,9 +63,15 @@
 #### 2-3. 動作確認
 1. コピーしたURLの末尾に `/version` を追加
    ```
-   https://voicevox-engine-production-abc123.up.railway.app/version
+   https://voicevox-engine-production.up.railway.app/version
    ```
 2. ブラウザでアクセスして、VoiceVoxのバージョン情報が表示されることを確認
+
+**⚠️ 重要: ポート設定について**
+- VoiceVoxサービスは **ポート50021** で動作します
+- RailwayのURLは **HTTPSで443ポート** を使用します
+- **8080ポートは使用しません**
+- 正しいアクセス方法: `https://your-url.railway.app/version`（ポート指定なし）
 
 ---
 
@@ -186,6 +192,33 @@ RAILWAY: true
 2. Memory を 1024MB 以上に設定
 3. CPU を 500m 以上に設定
 4. 再デプロイを実行
+```
+
+#### **問題1.1: /version エンドポイントが応答しない**
+```
+症状: URLは取得できるが、/version にアクセスすると "アプリケーションが返答に失敗" エラー
+原因: VoiceVoxエンジンが正常に起動していない
+
+🔍 即座確認事項:
+1. Railway Dashboard → voicevox-engine → "Logs" タブ
+2. 以下のメッセージがあるか確認:
+   ✅ "=== VoiceVox Engine Debug Start ==="
+   ✅ "Current directory: /opt/voicevox_engine"
+   ✅ "=== Starting VoiceVox Engine ==="
+   ✅ "Uvicorn running on http://0.0.0.0:50021"
+
+❌ エラーメッセージがある場合:
+- "No such file or directory" → Dockerイメージ問題
+- "Permission denied" → 権限問題
+- "Port already in use" → ポート競合
+- メモリ不足系エラー → リソース不足
+
+🔧 解決手順:
+1. Logsで具体的なエラーメッセージを確認
+2. エラー内容に応じて以下を実行:
+   - リソース不足 → Memory 1536MB, CPU 1000m に増量
+   - 起動失敗 → Dockerfile.stable に切り替え
+   - 完全に起動しない → Redeploy実行
 ```
 
 #### **問題2: Discord Botが VoiceVox に接続できない**

@@ -1,20 +1,26 @@
 # 🚨 VoiceVox Railway クラッシュ問題解決ガイド
 
-## 🚨 VoiceVox Railway クラッシュ問題解決ガイド（緊急版）
+## 🚨 VoiceVox Railway クラッシュ問題解決ガイド（最終版）
 
-## ❌ 緊急問題: **利用規約の大量出力でクラッシュ**
+## ❌ **根本原因特定: README.md自動表示によるログスパム**
 
-### 新たな症状:
-- VoiceVoxエンジンが起動時に**利用規約を大量出力**
-- 「四国めたん」「冥鳴ひまり」「九州そら」等の規約テキストが連続表示
-- Railway Logsが制限を超えて **即座にクラッシュ**
+### **問題の正体:**
+- VOICEVOXエンジンが起動時に `/opt/voicevox_engine/README.md` を自動読み込み
+- **利用規約全文（数千行）** をログに出力
+- Railwayのログ制限（約1000行/分）を瞬時に超過
+- **即座にクラッシュ判定**される
 
-### 根本原因:
-**VOICEVOXエンジンv0.18以降の仕様変更** - 起動時に全ライブラリの利用規約を出力するように
+### **症状の再現:**
+```
+Starting Container
++ cat /opt/voicevox_engine/README.md
+# VOICEVOX エンジン利用規約
+（延々と続く利用規約テキスト...）
+```
 
 ---
 
-## 🔧 緊急解決方法
+## 🔧 **最終解決策（即座実行）**
 
 ### **🚨 即座実行: 完全サイレント化対応**
 
@@ -28,35 +34,41 @@ voicevox-service/Dockerfile.stable # 安定版（バックアップ）
 voicevox-service/railway.yml     # リソース設定最適化
 ```
 
-#### ステップ1: **緊急修正版をデプロイ**
-```powershell
-# 最新の完全サイレント化版を確認
-cd "c:\Users\yomas\Github\OWN_Discord_Bot"
-git add voicevox-service/
-git commit -m "🚨 EMERGENCY: Complete silent VoiceVox to fix terms-of-use crash"
-git push origin master
-```
+### **🚨 即座実行: README.md完全削除版**
 
-**重要:** この修正版は利用規約出力を**完全に抑制**します
-
-#### ステップ2: **Railway即座確認**
-1. **Railway Dashboard** → **VoiceVoxサービス**
-2. 新しいDeploymentが開始されることを確認
-3. **5分以内に「Success」** になることを確認
-
-### **📋 今回の修正内容:**
+#### **今回の修正内容:**
 ```dockerfile
-# 🚨 新規追加: 利用規約出力完全抑制
-RUN echo '#!/bin/bash
-/usr/bin/python3 run.py --host 0.0.0.0 --port 50021 \
-  --allow_origin "*" --disable_mutable_api --cpu_num_threads 1 \
-  --log_level ERROR 2>/dev/null | \
-  grep -v "利用規約\|Terms\|規約\|ライブラリ\|クレジット" || true' \
-  > /opt/voicevox_engine/start_silent.sh
+# 🚨 全てのドキュメントファイルを削除
+RUN find /opt/voicevox_engine -name "*.md" -delete || true && \
+    find /opt/voicevox_engine -name "README*" -delete || true && \
+    touch /opt/voicevox_engine/README.md
+
+# Python出力制御
+ENV PYTHONUNBUFFERED=0
+ENV PYTHONIOENCODING=utf-8
 
 # 完全サイレント起動
-CMD ["/bin/bash", "/opt/voicevox_engine/start_silent.sh"]
+CMD exec /usr/bin/python3 run.py \
+    --host 0.0.0.0 \
+    --port 50021 \
+    --allow_origin "*" \
+    --disable_mutable_api \
+    --cpu_num_threads 1 \
+    --log_level ERROR \
+    >/dev/null 2>&1
 ```
+
+#### **🎯 この修正により:**
+1. **README.md削除** → 利用規約出力が物理的に不可能
+2. **全出力をnull** → 一切のログを出力しない
+3. **ERROR level** → 重要なエラーのみ
+4. **完全無音起動** → Railwayログ制限回避
+
+#### **✅ 確認手順:**
+1. **Railway Dashboard** → **voicevox-engine サービス**
+2. **「Deployments」** で最新デプロイを確認
+3. **成功後5分待機** → サービスが安定稼働
+4. **URL/version にアクセス** → 正常なJSONレスポンス確認
 
 ### **方法2: より安定なDockerfile使用（問題継続時）**
 
