@@ -64,11 +64,92 @@ interface VoiceSettings {
     pitch: number
 }
 
+interface EnhancedVoiceSettings extends VoiceSettings {
+    intonation?: number
+    volume?: number
+}
+
 // デフォルト音声設定
 const DEFAULT_VOICE_SETTINGS: VoiceSettings = {
     speakerId: 3, // ずんだもん（ノーマル）
     speed: 1.0,   // 通常速度
     pitch: 0.0    // 通常音程
+}
+
+/**
+ * Speaker IDに応じて音声パラメータを強化（Mock Mode対応）
+ */
+function enhanceVoiceSettings(settings: VoiceSettings): EnhancedVoiceSettings {
+    const enhanced: EnhancedVoiceSettings = { ...settings }
+    
+    // Speaker IDに応じて音声特性を調整
+    switch (settings.speakerId) {
+        case 0: // 四国めたん（あまあま）
+            enhanced.pitch = settings.pitch + 0.05
+            enhanced.speed = settings.speed * 0.95
+            enhanced.intonation = 1.1
+            enhanced.volume = 1.0
+            break
+        case 1: // ずんだもん（あまあま）
+            enhanced.pitch = settings.pitch + 0.03
+            enhanced.speed = settings.speed * 0.9
+            enhanced.intonation = 1.05
+            enhanced.volume = 0.95
+            break
+        case 2: // 四国めたん（ノーマル）
+            enhanced.pitch = settings.pitch + 0.02
+            enhanced.speed = settings.speed * 1.0
+            enhanced.intonation = 1.0
+            enhanced.volume = 1.0
+            break
+        case 3: // ずんだもん（ノーマル）
+            enhanced.pitch = settings.pitch + 0.0
+            enhanced.speed = settings.speed * 1.0
+            enhanced.intonation = 1.0
+            enhanced.volume = 1.0
+            break
+        case 6: // 四国めたん（ツンツン）
+            enhanced.pitch = settings.pitch + 0.08
+            enhanced.speed = settings.speed * 1.1
+            enhanced.intonation = 1.2
+            enhanced.volume = 1.05
+            break
+        case 7: // ずんだもん（ツンツン）
+            enhanced.pitch = settings.pitch + 0.06
+            enhanced.speed = settings.speed * 1.05
+            enhanced.intonation = 1.15
+            enhanced.volume = 1.02
+            break
+        case 8: // 春日部つむぎ
+            enhanced.pitch = settings.pitch - 0.02
+            enhanced.speed = settings.speed * 0.98
+            enhanced.intonation = 0.95
+            enhanced.volume = 1.0
+            break
+        case 9: // 波音リツ
+            enhanced.pitch = settings.pitch - 0.05
+            enhanced.speed = settings.speed * 1.02
+            enhanced.intonation = 0.9
+            enhanced.volume = 1.0
+            break
+        case 10: // 雨晴はう
+            enhanced.pitch = settings.pitch + 0.04
+            enhanced.speed = settings.speed * 0.92
+            enhanced.intonation = 1.08
+            enhanced.volume = 0.98
+            break
+        case 11: // 玄野武宏
+            enhanced.pitch = settings.pitch - 0.08
+            enhanced.speed = settings.speed * 1.08
+            enhanced.intonation = 0.85
+            enhanced.volume = 1.1
+            break
+        default:
+            enhanced.intonation = 1.0
+            enhanced.volume = 1.0
+    }
+    
+    return enhanced
 }
 
 // 音声チャンネル設定ファイル
@@ -246,8 +327,12 @@ async function synthesizeVoice(text: string, guildId: string): Promise<Buffer | 
         const settings = getVoiceSettings(guildId)
         console.log(`🎤 VoiceVox音声合成開始: "${text}" (Speaker: ${getSpeakerName(settings.speakerId)}, Speed: ${settings.speed}, Pitch: ${settings.pitch})`)
         
+        // Speaker IDに応じた音声パラメータを調整（Mock Mode対応）
+        const enhancedSettings = enhanceVoiceSettings(settings)
+        console.log(`🎭 Enhanced settings for Mock Mode:`, enhancedSettings)
+        
         // まず音素クエリを取得
-        const queryResponse = await fetch(`${VOICEVOX_API_URL}/audio_query?text=${encodeURIComponent(text)}&speaker=${settings.speakerId}`, {
+        const queryResponse = await fetch(`${VOICEVOX_API_URL}/audio_query?text=${encodeURIComponent(text)}&speaker=${enhancedSettings.speakerId}`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
@@ -261,12 +346,14 @@ async function synthesizeVoice(text: string, guildId: string): Promise<Buffer | 
         
         const audioQuery = await queryResponse.json()
         
-        // 音声設定を適用
-        audioQuery.speedScale = settings.speed
-        audioQuery.pitchScale = settings.pitch
+        // 強化された音声設定を適用
+        audioQuery.speedScale = enhancedSettings.speed
+        audioQuery.pitchScale = enhancedSettings.pitch
+        audioQuery.intonationScale = enhancedSettings.intonation || 1.0
+        audioQuery.volumeScale = enhancedSettings.volume || 1.0
         
         // 音声合成を実行
-        const synthesisResponse = await fetch(`${VOICEVOX_API_URL}/synthesis?speaker=${settings.speakerId}`, {
+        const synthesisResponse = await fetch(`${VOICEVOX_API_URL}/synthesis?speaker=${enhancedSettings.speakerId}`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
