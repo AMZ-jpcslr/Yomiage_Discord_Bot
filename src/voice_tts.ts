@@ -508,18 +508,36 @@ export function startMessageMonitoring(client: Client): void {
         // DMは無視
         if (!message.guild) return
         
+        console.log(`🔍 VoiceVox: メッセージ受信 - サーバー: ${message.guild.name}, チャンネル: ${message.channel.id}, 内容: "${message.content}"`)
+        
         try {
             const config = loadVoiceChannelConfig()
-            const guildConfig = config[message.guild.id]
+            console.log('🔍 VoiceVox: 設定ファイル読み込み完了', config)
             
-            if (!guildConfig) return
+            const guildConfig = config[message.guild.id]
+            console.log(`🔍 VoiceVox: サーバー設定:`, guildConfig)
+            
+            if (!guildConfig) {
+                console.log('⚠️ VoiceVox: このサーバーは設定されていません')
+                return
+            }
             
             // 設定されたテキストチャンネルからのメッセージのみ処理
-            if (message.channel.id !== guildConfig.textChannelId) return
+            if (message.channel.id !== guildConfig.textChannelId) {
+                console.log(`⚠️ VoiceVox: チャンネル不一致 - 現在: ${message.channel.id}, 設定: ${guildConfig.textChannelId}`)
+                return
+            }
+            
+            console.log('✅ VoiceVox: チャンネル一致、音声読み上げ開始')
             
             // ボイスチャンネルに誰もいない場合は読み上げしない
             const voiceChannel = message.guild.channels.cache.get(guildConfig.voiceChannelId) as VoiceChannel
-            if (!voiceChannel || voiceChannel.members.size === 0) return
+            if (!voiceChannel || voiceChannel.members.size === 0) {
+                console.log('⚠️ VoiceVox: ボイスチャンネルが空です')
+                return
+            }
+            
+            console.log(`🎤 VoiceVox: 読み上げキューに追加 - "${message.content}"`)
             
             // 音声読み上げキューに追加
             await addToSpeechQueue(message.content, message.guild.id)
