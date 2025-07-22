@@ -3,8 +3,7 @@
 
 # ビルド設定
 build:
-  buildCommand: npm run build
-  startCommand: npm run start:railway
+  dockerfile: Dockerfile
 
 # 環境変数
 environment:
