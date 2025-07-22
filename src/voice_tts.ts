@@ -320,8 +320,115 @@ async function checkVoiceVoxAvailability(): Promise<boolean> {
 }
 
 /**
- * VoiceVox APIで音声合成
+ * Speaker IDに応じてFFmpegで音声ファイルを後処理
  */
+async function applyVoiceEffects(inputPath: string, settings: EnhancedVoiceSettings): Promise<string> {
+    const outputPath = inputPath.replace('.wav', '_processed.wav')
+    
+    try {
+        // Speaker IDに応じたFFmpegフィルターを構築
+        const filters = []
+        
+        // 音程変更 (pitch)
+        if (settings.pitch !== 0) {
+            const semitones = settings.pitch * 12 // -0.15 to 0.15 → -1.8 to 1.8 semitones
+            filters.push(`asetrate=48000*${Math.pow(2, semitones/12)},aresample=48000`)
+        }
+        
+        // 速度変更 (speed) - 音程を保持
+        if (settings.speed !== 1.0) {
+            filters.push(`atempo=${settings.speed}`)
+        }
+        
+        // 音量調整 (volume)
+        if (settings.volume && settings.volume !== 1.0) {
+            filters.push(`volume=${settings.volume}`)
+        }
+        
+        // 抑揚/音質調整 (intonation) - EQで模擬
+        if (settings.intonation && settings.intonation !== 1.0) {
+            if (settings.intonation > 1.0) {
+                // 抑揚を強くする - 高音域を強調
+                filters.push(`equalizer=f=2000:width_type=h:width=1000:g=${(settings.intonation - 1.0) * 6}`)
+            } else {
+                // 抑揚を弱くする - 中音域を強調
+                filters.push(`equalizer=f=1000:width_type=h:width=800:g=${(1.0 - settings.intonation) * 4}`)
+            }
+        }
+        
+        // Character-specific voice effects
+        switch (settings.speakerId) {
+            case 0: // 四国めたん（あまあま）
+                filters.push('equalizer=f=800:width_type=h:width=200:g=3') // 柔らかい音質
+                break
+            case 1: // ずんだもん（あまあま）
+                filters.push('equalizer=f=1200:width_type=h:width=300:g=2')
+                break
+            case 6: // 四国めたん（ツンツン）
+                filters.push('equalizer=f=2500:width_type=h:width=500:g=4') // 鋭い音質
+                break
+            case 7: // ずんだもん（ツンツン）
+                filters.push('equalizer=f=2000:width_type=h:width=400:g=3')
+                break
+            case 8: // 春日部つむぎ
+                filters.push('equalizer=f=600:width_type=h:width=150:g=2') // 落ち着いた音質
+                break
+            case 9: // 波音リツ
+                filters.push('equalizer=f=400:width_type=h:width=100:g=3') // 低音強調
+                break
+            case 10: // 雨晴はう
+                filters.push('equalizer=f=1500:width_type=h:width=350:g=2.5')
+                break
+            case 11: // 玄野武宏
+                filters.push('equalizer=f=300:width_type=h:width=80:g=5') // 男性的な低音
+                break
+        }
+        
+        if (filters.length === 0) {
+            // エフェクトが不要な場合はそのまま返す
+            return inputPath
+        }
+        
+        const filterChain = filters.join(',')
+        console.log(`🎛️ FFmpeg音声処理: Speaker ${settings.speakerId} - ${filterChain}`)
+        
+        const { spawn } = require('child_process')
+        
+        return new Promise((resolve, reject) => {
+            const ffmpeg = spawn('ffmpeg', [
+                '-i', inputPath,
+                '-af', filterChain,
+                '-y', // 出力ファイルを上書き
+                outputPath
+            ])
+            
+            ffmpeg.on('close', (code: number) => {
+                if (code === 0) {
+                    console.log(`✅ FFmpeg音声処理完了: ${outputPath}`)
+                    // 元ファイルを削除
+                    try {
+                        require('fs').unlinkSync(inputPath)
+                    } catch (e) {
+                        console.warn('⚠️ 元音声ファイル削除失敗:', e)
+                    }
+                    resolve(outputPath)
+                } else {
+                    console.error(`❌ FFmpeg音声処理失敗: code ${code}`)
+                    reject(new Error(`FFmpeg処理失敗: ${code}`))
+                }
+            })
+            
+            ffmpeg.on('error', (error: Error) => {
+                console.error('❌ FFmpeg実行エラー:', error)
+                reject(error)
+            })
+        })
+        
+    } catch (error) {
+        console.error('❌ 音声エフェクト適用エラー:', error)
+        return inputPath // エラー時は元ファイルを返す
+    }
+}
 async function synthesizeVoice(text: string, guildId: string): Promise<Buffer | null> {
     try {
         const settings = getVoiceSettings(guildId)
@@ -407,7 +514,13 @@ async function createAudioFile(text: string, guildId: string): Promise<string | 
         fs.writeFileSync(filepath, audioBuffer)
         console.log(`💾 音声ファイル保存完了: ${filepath}`)
         
-        return filepath
+        // Speaker IDに応じた音声エフェクトを適用
+        const settings = getVoiceSettings(guildId)
+        const enhancedSettings = enhanceVoiceSettings(settings)
+        const processedFilepath = await applyVoiceEffects(filepath, enhancedSettings)
+        
+        console.log(`🎛️ 音声処理完了: ${processedFilepath}`)
+        return processedFilepath
         
     } catch (error) {
         console.error('❌ 音声ファイル作成エラー:', error)
