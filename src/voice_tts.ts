@@ -546,9 +546,9 @@ function cleanTextForSpeech(text: string): string {
     // 前後の空白削除
     text = text.trim()
     
-    // 長すぎるテキストは切り詰め
-    if (text.length > 100) {
-        text = text.substring(0, 100) + '、以下省略'
+    // 長すぎるテキストは切り詰め（送信者名も考慮）
+    if (text.length > 80) {
+        text = text.substring(0, 80) + '、以下省略'
     }
     
     // 空文字列や記号のみの場合はスキップ
@@ -611,10 +611,14 @@ export function startMessageMonitoring(client: Client): void {
                 return
             }
             
-            console.log(`🎤 VoiceVox: 読み上げキューに追加 - "${message.content}"`)
+            // 送信者名とメッセージ内容を組み合わせて読み上げ
+            const senderName = message.member?.displayName || message.author.username
+            const textToSpeak = `${senderName}さん、${message.content}`
+            
+            console.log(`🎤 VoiceVox: 読み上げキューに追加 - "${textToSpeak}"`)
             
             // 音声読み上げキューに追加
-            await addToSpeechQueue(message.content, message.guild.id)
+            await addToSpeechQueue(textToSpeak, message.guild.id)
             
         } catch (error) {
             console.error('❌ メッセージ監視エラー:', error)
