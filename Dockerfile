@@ -34,10 +34,10 @@ RUN echo "=== ビルド完了 ===" && \
     echo "Working directory: $(pwd)" && \
     ls -la
 
-# dataディレクトリの権限設定
-RUN mkdir -p /app/data && \
-    chown -R node:node /app/data && \
-    chmod -R 755 /app/data
+# dataディレクトリとaudioディレクトリの権限設定
+RUN mkdir -p /app/data /app/audio && \
+    chown -R node:node /app/data /app/audio && \
+    chmod -R 755 /app/data /app/audio
 
 # 非特権ユーザーとして実行
 USER node

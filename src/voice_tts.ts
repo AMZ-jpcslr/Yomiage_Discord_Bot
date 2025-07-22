@@ -204,7 +204,13 @@ async function createAudioFile(text: string, guildId: string): Promise<string | 
     try {
         // 音声ディレクトリを作成
         if (!fs.existsSync(AUDIO_DIR)) {
-            fs.mkdirSync(AUDIO_DIR, { recursive: true })
+            try {
+                fs.mkdirSync(AUDIO_DIR, { recursive: true })
+                console.log(`✅ 音声ディレクトリ作成: ${AUDIO_DIR}`)
+            } catch (mkdirError) {
+                console.error(`❌ 音声ディレクトリ作成エラー: ${mkdirError}`)
+                throw new Error(`音声ディレクトリの作成に失敗しました: ${AUDIO_DIR}`)
+            }
         }
         
         // VoiceVoxで音声合成
