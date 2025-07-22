@@ -178,15 +178,19 @@ function shouldSendNotification(id: string, isIncomplete: boolean = false): bool
 }
 
 /**
- * データが不完全かどうかを判定（全種別対応）
+ * 地震情報かどうかを判定
+ */
+function isEarthquakeInformation(code: number): boolean {
+    // 551: 震度速報, 552: 震源・震度情報, 554-556: 緊急地震速報
+    return code === 551 || code === 552 || (code >= 554 && code <= 556)
+}
+
+/**
+ * データが不完全かどうかを判定（地震情報のみ）
  */
 function isIncompleteEarthquakeData(p2pData: P2PQuakeData): boolean {
-    // 地震情報以外（津波、気象警報等）は基本的に完全とみなす
-    if (p2pData.code !== 551 && p2pData.code !== 552) {
-        // ただし、titleやtextが空の場合は不完全と判定
-        if (!p2pData.title && !p2pData.text && !p2pData.areas) {
-            return true
-        }
+    // 地震情報以外は対象外
+    if (!isEarthquakeInformation(p2pData.code)) {
         return false
     }
     
@@ -261,6 +265,14 @@ async function connectP2PEarthquakeWebSocket(client: Client): Promise<void> {
                 
                 console.log(`📋 受信データ: コード${p2pData.code} - ${P2P_CODES[p2pData.code as keyof typeof P2P_CODES] || '未知の情報'}`)
                 
+                // 地震情報のみをフィルタリング
+                if (!isEarthquakeInformation(p2pData.code)) {
+                    console.log(`⏭️ 地震情報以外のため通知をスキップ: コード${p2pData.code} - ${P2P_CODES[p2pData.code as keyof typeof P2P_CODES] || '未知の情報'}`)
+                    return
+                }
+                
+                console.log(`✅ 地震情報を検出: コード${p2pData.code} - ${P2P_CODES[p2pData.code as keyof typeof P2P_CODES]}`)
+                
                 // 不完全データかどうかを判定
                 const isIncomplete = isIncompleteEarthquakeData(p2pData)
                 
@@ -269,7 +281,7 @@ async function connectP2PEarthquakeWebSocket(client: Client): Promise<void> {
                     return
                 }
                 
-                console.log('🚨 新しいP2P情報を検出（WebSocket）!')
+                console.log('🚨 新しい地震情報を検出（WebSocket）!')
                 console.log(`ID: ${p2pData.id}`)
                 console.log(`コード: ${p2pData.code}`)
                 console.log(`種別: ${P2P_CODES[p2pData.code as keyof typeof P2P_CODES] || '未知'}`)
@@ -281,7 +293,7 @@ async function connectP2PEarthquakeWebSocket(client: Client): Promise<void> {
                     console.log(`最大震度: ${p2pData.earthquake.maxScale || '不明'}`)
                 }
                 
-                // 全種別のP2P情報の処理とDiscord通知
+                // 地震情報の処理とDiscord通知
                 await sendP2PNotification(client, p2pData, isIncomplete)
                 
             } catch (parseError) {
@@ -328,10 +340,10 @@ async function connectP2PEarthquakeWebSocket(client: Client): Promise<void> {
 }
 
 /**
- * フォールバック用HTTPポーリング（全種別対応）
+ * フォールバック用HTTPポーリング（地震情報のみ）
  */
 async function fallbackP2PHttpPolling(client: Client): Promise<void> {
-    console.log('=== P2P全種別情報HTTPポーリング開始 ===')
+    console.log('=== P2P地震情報HTTPポーリング開始 ===')
     
     const checkInterval = 30000  // 30秒間隔
     
@@ -346,6 +358,14 @@ async function fallbackP2PHttpPolling(client: Client): Promise<void> {
             
             // 最新のP2P情報を処理（複数件チェック）
             for (const p2pData of p2pDataArray.slice(0, 5)) { // 最新5件をチェック
+                // 地震情報のみをフィルタリング
+                if (!isEarthquakeInformation(p2pData.code)) {
+                    console.log(`⏭️ 地震情報以外のため通知をスキップ（HTTP）: コード${p2pData.code} - ${P2P_CODES[p2pData.code as keyof typeof P2P_CODES] || '未知の情報'}`)
+                    continue
+                }
+                
+                console.log(`✅ 地震情報を検出（HTTP）: コード${p2pData.code} - ${P2P_CODES[p2pData.code as keyof typeof P2P_CODES]}`)
+                
                 // 不完全データかどうかを判定
                 const isIncomplete = isIncompleteEarthquakeData(p2pData)
                 
@@ -354,7 +374,7 @@ async function fallbackP2PHttpPolling(client: Client): Promise<void> {
                     continue
                 }
                 
-                console.log('=== 新しいP2P情報を検出（HTTPポーリング） ===')
+                console.log('=== 新しい地震情報を検出（HTTPポーリング） ===')
                 console.log(`ID: ${p2pData.id}`)
                 console.log(`コード: ${p2pData.code}`)
                 console.log(`種別: ${P2P_CODES[p2pData.code as keyof typeof P2P_CODES] || '未知'}`)
@@ -365,7 +385,7 @@ async function fallbackP2PHttpPolling(client: Client): Promise<void> {
                     console.log(`マグニチュード: M${p2pData.earthquake.hypocenter.magnitude || '不明'}`)
                 }
                 
-                // P2P情報の処理とDiscord通知
+                // 地震情報の処理とDiscord通知
                 await sendP2PNotification(client, p2pData, isIncomplete)
             }
             
@@ -374,7 +394,7 @@ async function fallbackP2PHttpPolling(client: Client): Promise<void> {
         }
     }, checkInterval)
     
-    console.log(`P2P全種別HTTPポーリング設定完了 (${checkInterval}ms間隔)`)
+    console.log(`P2P地震情報HTTPポーリング設定完了 (${checkInterval}ms間隔)`)
 }
 
 /**
