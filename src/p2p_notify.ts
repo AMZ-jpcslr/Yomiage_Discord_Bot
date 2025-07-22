@@ -458,7 +458,27 @@ async function sendP2PNotification(client: Client, p2pData: P2PQuakeData, isInco
     }
     
     // Discord埋め込みを作成
-    const embed = createP2PEarthquakeEmbed(p2pData)
+    let embed: EmbedBuilder
+    try {
+        embed = createP2PEarthquakeEmbed(p2pData)
+        console.log('✅ P2P埋め込み作成成功')
+    } catch (error) {
+        console.error('❌ P2P埋め込み作成エラー:', error)
+        console.error('📊 問題のあるP2Pデータ:', JSON.stringify(p2pData, null, 2))
+        
+        // フォールバック埋め込みを作成
+        embed = new EmbedBuilder()
+            .setTitle('🚨 P2P地震情報（データ不完全）')
+            .setDescription('地震情報を受信しましたが、データの一部が不完全です。')
+            .addFields({
+                name: 'データ形式エラー',
+                value: `コード: ${p2pData.code || '不明'}\nID: ${p2pData.id || '不明'}`,
+                inline: false
+            })
+            .setColor('#ff0000')
+            .setTimestamp()
+            .setFooter({ text: 'P2P地震情報 - データエラー' })
+    }
     
     // 不完全データの場合は警告を追加
     if (isIncomplete) {

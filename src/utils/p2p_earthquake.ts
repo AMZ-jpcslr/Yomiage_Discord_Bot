@@ -340,6 +340,19 @@ export function convertP2PDataToMapData(p2pData: P2PQuakeData): { earthquakeData
  */
 export function createP2PEarthquakeEmbed(p2pData: P2PQuakeData, options?: { includeMapImage?: boolean }): EmbedBuilder {
     console.log('📝 P2P情報埋め込み作成中...')
+    console.log('🔍 P2Pデータ構造確認:', {
+        code: p2pData.code,
+        hasEarthquake: !!p2pData.earthquake,
+        hasIssue: !!p2pData.issue,
+        hasComments: !!p2pData.comments,
+        id: p2pData.id
+    })
+    
+    // 必須データの検証
+    if (!p2pData.issue) {
+        console.error('❌ P2Pデータにissue情報がありません:', p2pData)
+        throw new Error('P2P地震情報のissue情報が不完全です')
+    }
     
     const codeDescription = P2P_CODES[p2pData.code as keyof typeof P2P_CODES] || `コード${p2pData.code}`
     
