@@ -1,6 +1,7 @@
 node_modules
 npm-debug.log
 .env
+.env.example
 .git
 .gitignore
 README.md
@@ -8,7 +9,25 @@ README.md
 coverage
 .cache
 dist
-# build <- buildディレクトリは除外しない（コメントアウト）
+# build <- buildディレクトリは除外しない（コンテナ内でビルドするため）
 logs
 *.log
 .DS_Store
+
+# Railway deployment files
+deploy-simple.ps1
+*.md
+DISCORD_INTENTS_FIX.md
+ES_MODULE_FIX.md
+INTENTS_QUICK_FIX.md
+PYTHON_ERROR_QUICKFIX.md
+SERVER_SETUP.md
+SETUP_CHECKLIST.md
+START_NOW.md
+VOICE_WEB_API_SETUP.md
+
+# Generated files
+generated_images/
+
+# Development files
+eslint.config.mjs

@@ -1,0 +1,25 @@
+# Railway プロジェクト設定
+# このファイルをプロジェクトルートに配置
+
+# ビルド設定
+build:
+  buildCommand: npm run build
+  startCommand: npm run start:railway
+
+# 環境変数
+environment:
+  NODE_ENV: production
+  RAILWAY: true
+  CANVAS_PREBUILT: false
+  NODE_OPTIONS: "--max-old-space-size=2048"
+  # VoiceVox Web API設定
+  # VOICEVOX_API_KEY: "your-api-key-here"  # デプロイ時に設定
+
+# リソース設定
+resources:
+  memory: 2048
+  cpu: 1000
+
+# ヘルスチェック
+healthcheck:
+  enabled: false
