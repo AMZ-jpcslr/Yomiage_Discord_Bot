@@ -7,21 +7,21 @@ EXPOSE $PORT
 # VoiceVoxエンジンの作業ディレクトリ設定
 WORKDIR /opt/voicevox_engine
 
-# 🚨 README.mdと全ドキュメントファイルを削除
-RUN find /opt/voicevox_engine -name "*.md" -delete || true && \
-    find /opt/voicevox_engine -name "README*" -delete || true && \
-    touch /opt/voicevox_engine/README.md
+# 🚨 全ての出力ファイルを無効化
+RUN rm -f /opt/voicevox_engine/README.md || true && \
+    echo "" > /opt/voicevox_engine/README.md && \
+    rm -f /opt/voicevox_engine/*.md || true
 
-# 環境変数で Python 出力制御
+# 環境変数で出力制御
 ENV PYTHONUNBUFFERED=0
 ENV PYTHONIOENCODING=utf-8
 
-# Railway用の完全サイレント起動
-CMD exec /usr/bin/python3 run.py \
+# 究極のサイレント起動（nohup使用）
+CMD nohup /usr/bin/python3 run.py \
     --host 0.0.0.0 \
     --port 50021 \
     --allow_origin "*" \
     --disable_mutable_api \
     --cpu_num_threads 1 \
     --log_level ERROR \
-    >/dev/null 2>&1
+    >/dev/null 2>&1 &
