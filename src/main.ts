@@ -1,26 +1,20 @@
 /**
- * Discord地震速報ボット メインファイル（新実装）
- * Wolfix API専用で震源地マークを正確に表示
+ * Discord Bot メインファイル
  */
 
 import { Client, GatewayIntentBits, ActivityType } from 'discord.js'
 import * as pingCommand from './commands/ping'
 import * as lotteryCommand from './commands/lottery'
 import * as shiftCommand from './commands/shift'
-import * as setEqChannelCommand from './commands/set_eq_channel'
-import * as getEqCommand from './commands/get_eq'  // 新しい実装
-import * as setMinIntensityCommand from './commands/set_min_intensity'  // 最低震度設定
-import * as showMinIntensityCommand from './commands/show_min_intensity'  // 最低震度確認
 import * as voiceWebCommand from './commands/voice_web'  // VoiceVox Web API読み上げ
 import dotenv from 'dotenv'
-import { monitorP2PEarthquakeAlerts } from './p2p_notify'  // P2P地震情報通知システム
 import { startMessageMonitoring as startWebMessageMonitoring } from './voice_web_api'  // Web API音声読み上げ
 import * as http from 'http'
 
 dotenv.config()
 
 // 環境変数とトークンの確認
-console.log('=== Discord地震速報ボット起動開始 ===')
+console.log('=== Discord Bot起動開始 ===')
 console.log('NODE_ENV:', process.env.NODE_ENV)
 console.log('TOKEN確認:', process.env.DISCORD_TOKEN ? '✅ 設定済み' : '❌ 未設定')
 console.log('VOICEVOX_API_KEY確認:', process.env.VOICEVOX_API_KEY ? '✅ 設定済み' : '❌ 未設定')
@@ -36,9 +30,9 @@ const client = new Client({
 
 // ステータスメッセージのバリエーション
 const statusMessages = [
-    'P2P地震速報API使用',
     'キヴォトスで業務中',
-    '地震情報配信中',
+    '通常運用中',
+    'スタンバイ状態',
 ]
 
 // 時間帯別メッセージ
@@ -119,18 +113,6 @@ client.on('interactionCreate', async interaction => {
             case 'shift':
                 await shiftCommand.execute(interaction)
                 break
-            case 'set_eq_channel':
-                await setEqChannelCommand.execute(interaction)
-                break
-            case 'get_eq':
-                await getEqCommand.execute(interaction)
-                break
-            case 'set_min_intensity':
-                await setMinIntensityCommand.execute(interaction)
-                break
-            case 'show_min_intensity':
-                await showMinIntensityCommand.execute(interaction)
-                break
             case 'voice_web':
                 await voiceWebCommand.execute(interaction)
                 break
@@ -182,10 +164,6 @@ client.once('ready', async () => {
         process.exit(0)
     })
 
-    // P2P地震情報監視システムを開始
-    console.log('🚨 P2P地震情報監視システム開始...')
-    monitorP2PEarthquakeAlerts(client)
-    
     // VoiceVox Web API音声読み上げ監視を開始  
     console.log('🌐 VoiceVox Web API音声読み上げ監視開始...')
     startWebMessageMonitoring(client)
@@ -219,11 +197,11 @@ const server = http.createServer((req, res) => {
             botStatus: client.user ? 'online' : 'offline',
             guilds: client.guilds.cache.size,
             uptime: process.uptime(),
-            system: 'P2P地震情報監視システム'
+            system: 'Discord Bot システム'
         }))
     } else if (req.url === '/') {
         res.writeHead(200, { 'Content-Type': 'text/plain' })
-        res.end('Discord 地震速報ボット (P2P地震情報API) は正常に動作中です！')
+        res.end('Discord Bot は正常に動作中です！')
     } else {
         res.writeHead(404)
         res.end('Not Found')
