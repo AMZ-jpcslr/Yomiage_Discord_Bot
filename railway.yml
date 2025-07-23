@@ -6,13 +6,13 @@ build:
   builder: DOCKERFILE
   dockerfilePath: Dockerfile.railway
 
-# 環境変数 - マップ生成専用メモリ最適化（expose-gc除外）
+# 環境変数 - マップ生成専用メモリ最適化（Railway許可フラグのみ）
 environment:
   NODE_ENV: production
   RAILWAY: true
   SKIP_MAP_GENERATION: false
   FORCE_MAP_GENERATION: true
-  NODE_OPTIONS: "--max-old-space-size=6144 --max-semi-space-size=256 --optimize-for-size"
+  NODE_OPTIONS: "--max-old-space-size=6144 --max-semi-space-size=256"
   # VoiceVox Web API設定
   # VOICEVOX_API_KEY: "your-api-key-here"  # デプロイ時に設定
 

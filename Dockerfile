@@ -54,7 +54,7 @@ ENV NODE_ENV=production
 ENV RAILWAY=true
 ENV SKIP_MAP_GENERATION=false
 ENV FORCE_MAP_GENERATION=true
-ENV NODE_OPTIONS="--max-old-space-size=7168 --max-semi-space-size=512 --optimize-for-size"
+ENV NODE_OPTIONS="--max-old-space-size=6144 --max-semi-space-size=256"
 
 # Create directories
 RUN mkdir -p generated_images
