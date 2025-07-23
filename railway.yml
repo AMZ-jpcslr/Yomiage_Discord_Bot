@@ -16,7 +16,7 @@ environment:
 
 # リソース設定
 resources:
-  memory: 2048
+  memory: 3072
   cpu: 1000
 
 # ヘルスチェック

@@ -133,6 +133,10 @@ export async function execute(interaction: ChatInputCommandInteraction) {
         
         if (mapData) {
             try {
+                // メモリ使用量をチェック
+                const memBefore = process.memoryUsage()
+                console.log(`🧠 地震マップ生成前のメモリ使用量: ${Math.round(memBefore.heapUsed / 1024 / 1024)}MB`)
+                
                 // 地震マップを生成（震度分布付き）
                 console.log('🗺️ 震度分布付き地震マップ生成中...')
                 const mapImagePath = await generateEarthquakeMap(mapData.earthquakeData, mapData.areaInfo)

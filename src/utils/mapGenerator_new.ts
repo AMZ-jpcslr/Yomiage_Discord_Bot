@@ -79,6 +79,10 @@ export async function generateEarthquakeMap(earthquakeData: EarthquakeData, area
     try {
         console.log('Starting earthquake map generation...')
         
+        // メモリ管理: プロセス開始時のメモリ使用量をログ
+        const memBefore = process.memoryUsage()
+        console.log(`Memory before map generation: ${Math.round(memBefore.heapUsed / 1024 / 1024)}MB`)
+        
         // Use CommonJS-compatible dynamic import to avoid require() of ES modules
         const d3Module = await Function('return import("d3")')()
         const d3GeoModule = await Function('return import("d3-geo")')()
@@ -754,19 +758,35 @@ export async function generateEarthquakeMap(earthquakeData: EarthquakeData, area
         
         const filepath = path.join(outputDir, filename)
         
-        // Convert SVG to PNG with proper text rendering
+        // Convert SVG to PNG with proper text rendering and memory optimization
+        console.log('Converting SVG to PNG with memory optimization...')
         const baseImage = await sharp(Buffer.from(svgWithEncoding, 'utf8'))
             .png({
-                quality: 95,
-                progressive: true
+                quality: 90,
+                progressive: true,
+                compressionLevel: 9
+            })
+            .resize(800, 600, { 
+                fit: 'inside',
+                withoutEnlargement: true 
             })
             .toBuffer()
+        
+        // メモリ使用量をチェック
+        const memAfter = process.memoryUsage()
+        console.log(`Memory after image processing: ${Math.round(memAfter.heapUsed / 1024 / 1024)}MB`)
         
         // 震度アイコンは地図ではなくDiscord embedに表示するため、ここでは合成しない
         console.log(`地震マップ生成完了: 震度アイコンはembedに表示予定`)
         
         // 最終画像を保存
-        await sharp(baseImage).toFile(filepath)
+        await sharp(baseImage)
+            .toFile(filepath)
+        
+        // メモリクリーンアップを促進
+        if (global.gc) {
+            global.gc()
+        }
         
         console.log('✅ 地震マップ画像を生成しました:', filename)
         console.log('📁 保存パス:', filepath)

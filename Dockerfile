@@ -17,10 +17,16 @@ RUN apk add --no-cache \
     g++ \
     ffmpeg \
     opus-dev \
-    libsodium-dev
+    libsodium-dev \
+    vips-dev
 
 # Set working directory
 WORKDIR /app
+
+# Set memory optimization environment variables
+ENV NODE_OPTIONS="--max-old-space-size=1536 --optimize-for-size"
+ENV SHARP_IGNORE_GLOBAL_LIBVIPS=1
+ENV SHARP_FORCE_GLOBAL_LIBVIPS=false
 
 # Copy package files
 COPY package*.json ./
