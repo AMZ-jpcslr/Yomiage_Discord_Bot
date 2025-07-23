@@ -14,6 +14,11 @@ import { scaleStringToCode } from './p2p_earthquake'
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const simplify = require('simplify-geojson')
 
+// Sharp初期化時にSIGSEGV防止のための制限設定
+sharp.cache(false) // キャッシュ無効化でメモリ使用量削減
+sharp.concurrency(1) // 同時実行数を1に制限
+sharp.simd(false) // SIMD無効化で安定性向上
+
 interface EarthquakeData {
     longitude: number
     latitude: number
@@ -93,6 +98,14 @@ export async function generateEarthquakeMap(earthquakeData: EarthquakeData, area
             console.log(`Node.js heap limit: ${Math.round(heapStats.heap_size_limit / 1024 / 1024)}MB`)
             console.log(`Used heap: ${Math.round(heapStats.used_heap_size / 1024 / 1024)}MB`)
             console.log(`Available heap: ${Math.round((heapStats.heap_size_limit - heapStats.used_heap_size) / 1024 / 1024)}MB`)
+            
+            // メモリ不足の早期検出
+            const availableMemoryMB = Math.round((heapStats.heap_size_limit - heapStats.used_heap_size) / 1024 / 1024)
+            if (availableMemoryMB < 1000) {
+                console.warn(`⚠️ 利用可能メモリが${availableMemoryMB}MBと少ない状態です`)
+                console.warn('⚠️ SIGSEGV防止のため処理を中止します')
+                throw new Error(`Insufficient memory for map generation: ${availableMemoryMB}MB available`)
+            }
             
             // 初期ガベージコレクションで最大メモリを確保
             if (global.gc) {
@@ -807,25 +820,52 @@ export async function generateEarthquakeMap(earthquakeData: EarthquakeData, area
             const svgBuffer = Buffer.from(svgWithEncoding, 'utf8')
             console.log(`SVG buffer size: ${Math.round(svgBuffer.length / 1024)}KB`)
             
-            // Sharp処理を段階的に実行してメモリ効率を改善
-            console.log('Stage 1: SVG to PNG conversion...')
-            const pngBuffer = await sharp(svgBuffer)
-                .png({
-                    quality: 90,
-                    progressive: false,
-                    compressionLevel: 1  // 高速化優先
+            // メモリ監視
+            const memBeforeSharp = process.memoryUsage()
+            console.log(`Memory before Sharp: ${Math.round(memBeforeSharp.heapUsed / 1024 / 1024)}MB / ${Math.round(memBeforeSharp.rss / 1024 / 1024)}MB RSS`)
+            
+            // SIGSEGV防止のため、Sharp処理を最小限の設定で実行
+            console.log('Stage 1: SVG to PNG conversion with safety limits...')
+            
+            // Sharp処理をtry-catchで囲み、タイムアウトも設定
+            const pngBuffer = await Promise.race([
+                sharp(svgBuffer, {
+                    limitInputPixels: 268402689, // 約16K×16K制限
+                    sequentialRead: true
                 })
-                .toBuffer()
+                .png({
+                    quality: 80,          // 品質を下げてメモリ使用量削減
+                    progressive: false,
+                    compressionLevel: 6,  // バランス重視
+                    adaptiveFiltering: false  // 高速化
+                })
+                .toBuffer(),
+                
+                // 30秒タイムアウト
+                new Promise<never>((_, reject) => 
+                    setTimeout(() => reject(new Error('Sharp PNG conversion timeout')), 30000)
+                )
+            ])
             
             console.log(`PNG buffer size: ${Math.round(pngBuffer.length / 1024)}KB`)
             
-            // 中間GC
+            // 中間メモリクリーンアップ
             if (global.gc) {
                 global.gc()
+                console.log('🧹 Stage 1 完了後のGC実行')
+            } else {
+                await new Promise(resolve => setImmediate(resolve))
             }
             
-            console.log('Stage 2: Resizing...')
-            baseImage = await sharp(pngBuffer)
+            const memAfterStage1 = process.memoryUsage()
+            console.log(`Memory after Stage 1: ${Math.round(memAfterStage1.heapUsed / 1024 / 1024)}MB / ${Math.round(memAfterStage1.rss / 1024 / 1024)}MB RSS`)
+            
+            console.log('Stage 2: Resizing with memory limits...')
+            baseImage = await Promise.race([
+                sharp(pngBuffer, {
+                    limitInputPixels: 134217728, // 約11K×11K制限
+                    sequentialRead: true
+                })
                 .resize(1000, 750, { 
                     fit: 'inside',
                     withoutEnlargement: true,
@@ -836,7 +876,13 @@ export async function generateEarthquakeMap(earthquakeData: EarthquakeData, area
                     progressive: true,
                     compressionLevel: 6
                 })
-                .toBuffer()
+                .toBuffer(),
+                
+                // 20秒タイムアウト
+                new Promise<never>((_, reject) => 
+                    setTimeout(() => reject(new Error('Sharp resize timeout')), 20000)
+                )
+            ])
                 
         } catch (sharpError) {
             console.error('❌ Sharp処理エラー:', sharpError)

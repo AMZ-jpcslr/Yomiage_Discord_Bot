@@ -161,6 +161,13 @@ export async function execute(interaction: ChatInputCommandInteraction) {
                 console.log(`  Heap Limit: ${Math.round(heapStats.heap_size_limit / 1024 / 1024)}MB`)
                 console.log(`  Available: ${Math.round((heapStats.heap_size_limit - heapStats.used_heap_size) / 1024 / 1024)}MB`)
                 
+                // SIGSEGV防止：利用可能メモリが1GB未満の場合は処理を中止
+                const availableMemoryMB = Math.round((heapStats.heap_size_limit - heapStats.used_heap_size) / 1024 / 1024)
+                if (availableMemoryMB < 1000) {
+                    console.warn(`⚠️ メモリ不足のためマップ生成を中止: ${availableMemoryMB}MB利用可能`)
+                    throw new Error(`Insufficient memory for map generation: ${availableMemoryMB}MB available`)
+                }
+                
                 // Railway環境での安全な地震マップ生成
                 console.log('🗺️ 震度分布付き地震マップ生成中...')
                 
