@@ -179,8 +179,12 @@ export async function generateEarthquakeMap(earthquakeData: EarthquakeData, area
         console.log(`area_info.epicenter: [${area_info.epicenter[0]}, ${area_info.epicenter[1]}]`)
         
         // Extract config values (earthquake-alert/map-draw style)
-        const width = config.width
-        const height = config.height
+        // Railway環境では解像度を下げてSIGSEGVを回避
+        const width = process.env.RAILWAY === 'true' ? Math.floor(config.width * 0.5) : config.width
+        const height = process.env.RAILWAY === 'true' ? Math.floor(config.height * 0.5) : config.height
+        
+        console.log(`画像サイズ設定: ${width}x${height} (Railway=${process.env.RAILWAY})`)
+        
         const map_stroke = config.stroke_width
         const resolution = config.resolution
         const def_scale = config.scale
@@ -905,10 +909,38 @@ export async function generateEarthquakeMap(earthquakeData: EarthquakeData, area
                 console.log(`Sharp metadata取得成功: ${metaData.width}x${metaData.height}`)
                 
                 // メタデータ取得成功後、実際の変換を実行
+                console.log(`✅ Sharp metadata確認完了: ${metaData.width}x${metaData.height}`)
+                
+                // SIGSEGV回避のため、極小サイズで先にテスト変換
+                console.log('🧪 テスト変換を実行中...')
+                const testBuffer = await sharp(svgBuffer, {
+                    limitInputPixels: 1048576, // 1K×1K制限でテスト
+                    sequentialRead: true,
+                    failOn: 'none',
+                    animated: false
+                })
+                .resize(100, 100, { fit: 'inside' })
+                .png({ quality: 50, progressive: false })
+                .toBuffer()
+                
+                console.log(`✅ テスト変換成功: ${testBuffer.length}bytes`)
+                
+                // テスト成功後、実際のサイズで変換
+                console.log('🎯 実際の変換を開始...')
                 pngBuffer = await Promise.race([
-                    testSharp
+                    sharp(svgBuffer, {
+                        limitInputPixels: 4194304, // 2K×2K制限（さらに縮小）
+                        sequentialRead: true,
+                        failOn: 'none',
+                        animated: false
+                    })
+                    .resize(960, 540, { // サイズを半分に縮小
+                        fit: 'inside',
+                        withoutEnlargement: true,
+                        kernel: sharp.kernel.nearest
+                    })
                     .png({
-                        quality: 70,          // 品質を更に下げてメモリ使用量削減
+                        quality: 60,          // 品質を更に下げてメモリ使用量削減
                         progressive: false,
                         compressionLevel: 9,  // 最大圧縮でメモリ効率化
                         adaptiveFiltering: false,
@@ -916,26 +948,31 @@ export async function generateEarthquakeMap(earthquakeData: EarthquakeData, area
                     })
                     .toBuffer(),
                     
-                    // 15秒タイムアウト（短縮）
+                    // 10秒タイムアウト
                     new Promise<never>((_, reject) => 
-                        setTimeout(() => reject(new Error('Sharp PNG conversion timeout (15s)')), 15000)
+                        setTimeout(() => reject(new Error('Sharp PNG conversion timeout (10s)')), 10000)
                     )
                 ])
                 
             } catch (sharpInitError) {
                 console.error('❌ Sharp初期化エラー:', sharpInitError)
-                // フォールバック: より小さなピクセル制限で再試行
-                console.log('🔄 フォールバックモードで再試行')
+                // フォールバック: 最小限の設定で再試行
+                console.log('🔄 緊急フォールバックモードで再試行')
                 
                 pngBuffer = await Promise.race([
                     sharp(svgBuffer, {
-                        limitInputPixels: 16777216, // 約4K×4K制限（極端に削減）
+                        limitInputPixels: 1048576, // 1K×1K制限（極端に削減）
                         sequentialRead: true,
                         failOn: 'none',
                         animated: false
                     })
+                    .resize(480, 270, { // さらに小さなサイズ
+                        fit: 'inside',
+                        withoutEnlargement: true,
+                        kernel: sharp.kernel.nearest
+                    })
                     .png({
-                        quality: 60,          // 更に品質を下げる
+                        quality: 40,          // 最低品質
                         progressive: false,
                         compressionLevel: 9,
                         adaptiveFiltering: false,
@@ -943,49 +980,31 @@ export async function generateEarthquakeMap(earthquakeData: EarthquakeData, area
                     })
                     .toBuffer(),
                     
-                    // 10秒タイムアウト（更に短縮）
+                    // 5秒タイムアウト（最短）
                     new Promise<never>((_, reject) => 
-                        setTimeout(() => reject(new Error('Sharp fallback timeout (10s)')), 10000)
+                        setTimeout(() => reject(new Error('Sharp emergency fallback timeout (5s)')), 5000)
                     )
                 ])
+                
+                console.log('⚠️ 緊急フォールバックモードで変換完了')
             }
             
             console.log(`PNG buffer size: ${Math.round(pngBuffer.length / 1024)}KB`)
             
+            // Stage 1で完了（Stage 2のリサイズを無効化してSIGSEGVを回避）
+            baseImage = pngBuffer
+            console.log('✅ Stage 1のみで変換完了（Stage 2スキップでSIGSEGV回避）')
+            
             // 中間メモリクリーンアップ
             if (global.gc) {
                 global.gc()
-                console.log('🧹 Stage 1 完了後のGC実行')
+                console.log('🧹 変換完了後のGC実行')
             } else {
                 await new Promise(resolve => setImmediate(resolve))
             }
             
             const memAfterStage1 = process.memoryUsage()
-            console.log(`Memory after Stage 1: ${Math.round(memAfterStage1.heapUsed / 1024 / 1024)}MB / ${Math.round(memAfterStage1.rss / 1024 / 1024)}MB RSS`)
-            
-            console.log('Stage 2: Resizing with memory limits...')
-            baseImage = await Promise.race([
-                sharp(pngBuffer, {
-                    limitInputPixels: 134217728, // 約11K×11K制限
-                    sequentialRead: true
-                })
-                .resize(1000, 750, { 
-                    fit: 'inside',
-                    withoutEnlargement: true,
-                    kernel: sharp.kernel.nearest  // 高速化
-                })
-                .png({
-                    quality: 85,
-                    progressive: true,
-                    compressionLevel: 6
-                })
-                .toBuffer(),
-                
-                // 20秒タイムアウト
-                new Promise<never>((_, reject) => 
-                    setTimeout(() => reject(new Error('Sharp resize timeout')), 20000)
-                )
-            ])
+            console.log(`Memory after conversion: ${Math.round(memAfterStage1.heapUsed / 1024 / 1024)}MB / ${Math.round(memAfterStage1.rss / 1024 / 1024)}MB RSS`)
                 
         } catch (sharpError) {
             console.error('❌ Sharp処理エラー:', sharpError)
@@ -1006,10 +1025,30 @@ export async function generateEarthquakeMap(earthquakeData: EarthquakeData, area
         // 震度アイコンは地図ではなくDiscord embedに表示するため、ここでは合成しない
         console.log(`地震マップ生成完了: 震度アイコンはembedに表示予定`)
         
-        // 最終画像を保存
+        // 最終画像を保存（Railway環境では追加の最適化）
         try {
-            await sharp(baseImage)
-                .toFile(filepath)
+            if (process.env.RAILWAY === 'true') {
+                // Railway環境では更に小さなサイズで保存
+                console.log('🚀 Railway環境向け最適化保存')
+                await sharp(baseImage)
+                    .resize(800, 600, { 
+                        fit: 'inside',
+                        withoutEnlargement: true,
+                        kernel: sharp.kernel.nearest
+                    })
+                    .png({
+                        quality: 70,
+                        progressive: false,
+                        compressionLevel: 9
+                    })
+                    .toFile(filepath)
+                console.log('✅ Railway最適化版で保存完了')
+            } else {
+                // ローカル環境では通常保存
+                await sharp(baseImage)
+                    .toFile(filepath)
+                console.log('✅ 通常版で保存完了')
+            }
         } catch (saveError) {
             console.error('❌ 画像保存エラー:', saveError)
             throw new Error(`Image save failed: ${saveError}`)
