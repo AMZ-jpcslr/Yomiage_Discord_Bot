@@ -4,7 +4,7 @@
 
 import { Client, TextChannel, EmbedBuilder, AttachmentBuilder } from 'discord.js'
 import { fetchAllP2PData, convertP2PDataToMapData, createP2PEarthquakeEmbed, P2PQuakeData, P2P_CODES } from './utils/p2p_earthquake'
-import { generateEarthquakeMapSVG } from './utils/mapGenerator_svg'
+import { generateEarthquakeMapWithPNG } from './utils/mapGenerator_svg'
 import { getIntensityIconPath } from './utils/intensityIcon'
 import * as fs from 'fs'
 import * as path from 'path'
@@ -627,17 +627,27 @@ async function sendP2PNotification(client: Client, p2pData: P2PQuakeData, isInco
                     const locations = convertP2PToLocations(mapData.areaInfo)
                     const outputDir = path.join(process.cwd(), 'generated_images')
                     
-                    const mapImagePath = await generateEarthquakeMapSVG(locations, outputDir)
-                    if (mapImagePath) {
-                        // SVGファイルの場合は拡張子を正しく設定
-                        const isMapSVG = mapImagePath.endsWith('.svg')
-                        const attachmentName = isMapSVG ? 'earthquake_map.svg' : 'earthquake_map.png'
-                        const attachment = new AttachmentBuilder(mapImagePath, { name: attachmentName })
+                    // SVGとPNG両方を生成
+                    const mapResult = await generateEarthquakeMapWithPNG(locations, outputDir)
+                    
+                    // PNG変換が成功した場合はPNGを、失敗した場合はSVGを使用
+                    const useImagePath = mapResult.pngPath || mapResult.svgPath
+                    const isMapPNG = useImagePath.endsWith('.png')
+                    const attachmentName = isMapPNG ? 'earthquake_map.png' : 'earthquake_map.svg'
+                    
+                    if (useImagePath) {
+                        const attachment = new AttachmentBuilder(useImagePath, { name: attachmentName })
                         files.push(attachment)
                         
                         // 地図画像を埋め込みの画像として設定
                         embed.setImage(`attachment://${attachmentName}`)
-                        console.log(`🗾 地震マップ生成成功（${isMapSVG ? 'SVG' : 'PNG'}画像として設定）`)
+                        console.log(`🗾 地震マップ生成成功（${isMapPNG ? 'PNG' : 'SVG'}画像として設定）`)
+                        
+                        if (mapResult.pngPath) {
+                            console.log('🖼️ PNG変換成功 - Discord通知で高品質表示')
+                        } else {
+                            console.log('📝 PNG変換失敗 - SVGファイルで代替送信')
+                        }
                     } else {
                         console.log('⚠️ 地震マップ生成失敗: 画像パスがnull')
                     }

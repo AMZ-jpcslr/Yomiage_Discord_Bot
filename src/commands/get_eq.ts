@@ -1,10 +1,10 @@
 ﻿/**
- * 新しい地震情報取得コマンド（P2P地震情報API専用）- SVG版
+ * 新しい地震情報取得コマンド（P2P地震情報API専用）- SVG+PNG版
  */
 
 import { SlashCommandBuilder, ChatInputCommandInteraction, AttachmentBuilder } from 'discord.js'
 import { fetchP2PQuakeData, convertP2PDataToMapData, createP2PEarthquakeEmbed, scaleCodeToString } from '../utils/p2p_earthquake'
-import { generateEarthquakeMapSVG } from '../utils/mapGenerator_svg'
+import { generateEarthquakeMapWithPNG } from '../utils/mapGenerator_svg'
 import { getIntensityIconPath } from '../utils/intensityIcon'
 import * as path from 'path'
 
@@ -112,31 +112,39 @@ export async function execute(interaction: ChatInputCommandInteraction) {
                 }
                 console.log(`📍 変換した地点数: ${locations.length}`)
                 
-                // タイムアウト付きでSVGマップ生成を実行（30秒）
-                const mapPromise = generateEarthquakeMapSVG(locations, outputDir)
+                // タイムアウト付きでSVG+PNGマップ生成を実行（30秒）
+                const mapPromise = generateEarthquakeMapWithPNG(locations, outputDir)
                 const timeoutPromise = new Promise((_, reject) => 
-                    setTimeout(() => reject(new Error('SVG map generation timeout (30s)')), 30000)
+                    setTimeout(() => reject(new Error('Earthquake map generation timeout (30s)')), 30000)
                 )
                 
-                const mapImagePath = await Promise.race([mapPromise, timeoutPromise]) as string
+                const mapResult = await Promise.race([mapPromise, timeoutPromise]) as { svgPath: string, pngPath: string | null }
                 
-                if (mapImagePath) {
-                    const attachment = new AttachmentBuilder(mapImagePath, { name: 'earthquake_intensity_map.svg' })
+                // PNG変換が成功した場合はPNGを、失敗した場合はSVGを使用
+                const useImagePath = mapResult.pngPath || mapResult.svgPath
+                const isMapPNG = useImagePath.endsWith('.png')
+                const attachmentName = isMapPNG ? 'earthquake_intensity_map.png' : 'earthquake_intensity_map.svg'
+                
+                if (useImagePath) {
+                    const attachment = new AttachmentBuilder(useImagePath, { name: attachmentName })
                     files.push(attachment)
                     
-                    // SVG地図ファイルを添付として設定
-                    embed.addFields({
-                        name: '📍 震度分布マップ',
-                        value: '添付のSVGファイルで詳細な震度分布を確認できます',
-                        inline: false
-                    })
-                    console.log('✅ SVG震度分布地震マップ生成成功:', mapImagePath)
+                    // 地図ファイルを埋め込み画像として設定
+                    embed.setImage(`attachment://${attachmentName}`)
+                    
+                    console.log(`✅ 震度分布地震マップ生成成功（${isMapPNG ? 'PNG' : 'SVG'}）:`, useImagePath)
+                    
+                    if (mapResult.pngPath) {
+                        console.log('🖼️ PNG変換成功 - Discord埋め込み画像で高品質表示')
+                    } else {
+                        console.log('📝 PNG変換失敗 - SVGファイルで代替表示')
+                    }
                     
                     // 生成後のメモリ状況確認
                     const memAfterMap = process.memoryUsage()
                     console.log(`🧠 マップ生成後メモリ: ${Math.round(memAfterMap.heapUsed / 1024 / 1024)}MB / ${Math.round(memAfterMap.rss / 1024 / 1024)}MB RSS`)
                 } else {
-                    console.log('⚠️ SVG地震マップ生成に失敗しました（タイムアウトまたは処理エラー）')
+                    console.log('⚠️ 地震マップ生成に失敗しました（タイムアウトまたは処理エラー）')
                 }
             } catch (mapError) {
                 console.error('❌ SVG地震マップ生成エラー:', mapError)

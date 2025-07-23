@@ -14,6 +14,15 @@ import { scaleStringToCode } from './p2p_earthquake'
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const simplify = require('simplify-geojson')
 
+// SVG to PNG conversion using sharp (safe mode)
+let sharp: any = null
+try {
+    sharp = require('sharp')
+    console.log('📦 Sharp loaded for SVG to PNG conversion')
+} catch (sharpError) {
+    console.warn('⚠️ Sharp not available, PNG conversion will be skipped')
+}
+
 // 地震マップの設定
 interface MapConfig {
     width: number
@@ -32,6 +41,50 @@ interface Location {
     lat: number
     lng: number
     intensityLevel: string
+}
+
+// SVGファイルをPNG画像に安全に変換する関数
+async function convertSVGtoPNG(svgFilePath: string, outputDir: string): Promise<string | null> {
+    if (!sharp) {
+        console.log('📝 Sharp利用不可のため、SVGファイルをそのまま返します')
+        return svgFilePath
+    }
+
+    try {
+        const svgBuffer = fs.readFileSync(svgFilePath)
+        const timestamp = Date.now()
+        const pngFilename = `earthquake_map_${timestamp}.png`
+        const pngFilePath = path.join(outputDir, pngFilename)
+
+        console.log('🔄 SVG→PNG変換開始（安全モード）...')
+        
+        // 超安全な設定でSVGをPNGに変換
+        await sharp(svgBuffer, {
+            limitInputPixels: 50000000, // 制限を設定
+            sequentialRead: true,
+            failOn: 'none'
+        })
+        .png({
+            quality: 90,
+            progressive: false,
+            compressionLevel: 6
+        })
+        .toFile(pngFilePath)
+
+        console.log('✅ SVG→PNG変換成功:', pngFilename)
+        
+        // SVGファイルサイズと比較
+        const svgStats = fs.statSync(svgFilePath)
+        const pngStats = fs.statSync(pngFilePath)
+        console.log(`📊 変換結果: SVG ${Math.round(svgStats.size / 1024)}KB → PNG ${Math.round(pngStats.size / 1024)}KB`)
+        
+        return pngFilePath
+
+    } catch (conversionError) {
+        console.error('❌ SVG→PNG変換エラー:', conversionError)
+        console.log('📝 変換失敗のため、SVGファイルをそのまま返します')
+        return svgFilePath
+    }
 }
 
 // 地震マップSVG生成関数
@@ -206,6 +259,12 @@ export async function generateEarthquakeMapSVG(
         const svgContent = svg.outerHTML
         fs.writeFileSync(filepath, svgContent, 'utf8')
         
+        console.log('✅ 地震マップ(SVG)を生成しました:', filename)
+        console.log('📁 保存パス:', filepath)
+        
+        // ファイル管理（古いファイルの削除）
+        manageImageFiles(outputDir, 10)
+        
         // メモリクリーンアップ
         if (global.gc) {
             console.log('🧹 GC実行')
@@ -214,17 +273,33 @@ export async function generateEarthquakeMapSVG(
             console.log(`Memory after GC: ${Math.round(memAfterGC.heapUsed / 1024 / 1024)}MB / ${Math.round(memAfterGC.rss / 1024 / 1024)}MB RSS`)
         }
         
-        console.log('✅ 地震マップ(SVG)を生成しました:', filename)
-        console.log('📁 保存パス:', filepath)
-        
-        // 生成後のファイル数を確認
-        const finalFileCount = fs.readdirSync(outputDir).filter(f => (f.endsWith('.png') || f.endsWith('.svg')) && f.startsWith('earthquake_map_')).length
-        console.log(`📊 現在の地震マップファイル数: ${finalFileCount}個`)
-        
         return filepath
         
     } catch (error) {
         console.error('Error generating earthquake map SVG:', error)
+        throw error
+    }
+}
+
+// SVG生成後、PNG変換も行う関数
+export async function generateEarthquakeMapWithPNG(
+    locations: Location[],
+    outputDir: string,
+    config?: Partial<MapConfig>
+): Promise<{ svgPath: string, pngPath: string | null }> {
+    try {
+        console.log('🗾 地震マップ生成開始（SVG + PNG変換）...')
+        
+        // まずSVGを生成
+        const svgPath = await generateEarthquakeMapSVG(locations, outputDir, config)
+        
+        // SVGをPNGに変換（エラー時はnullを返す）
+        const pngPath = await convertSVGtoPNG(svgPath, outputDir)
+        
+        return { svgPath, pngPath }
+        
+    } catch (error) {
+        console.error('Error generating earthquake map with PNG:', error)
         throw error
     }
 }
