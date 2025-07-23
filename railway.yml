@@ -5,19 +5,20 @@
 build:
   builder: nixpacks
 
-# 環境変数
+# 環境変数 - 高メモリ環境用
 environment:
   NODE_ENV: production
   RAILWAY: true
-  CANVAS_PREBUILT: false
-  NODE_OPTIONS: "--max-old-space-size=2048"
+  SKIP_MAP_GENERATION: false
+  FORCE_MAP_GENERATION: true
+  NODE_OPTIONS: "--max-old-space-size=6144"
   # VoiceVox Web API設定
   # VOICEVOX_API_KEY: "your-api-key-here"  # デプロイ時に設定
 
-# リソース設定 - メモリ制限を削減
+# リソース設定 - 最大メモリ活用
 resources:
-  memory: 2048
-  cpu: 500
+  memory: 8192
+  cpu: 2000
 
 # ヘルスチェック
 healthcheck:

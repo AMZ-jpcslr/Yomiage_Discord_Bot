@@ -106,6 +106,16 @@ export async function execute(interaction: ChatInputCommandInteraction) {
         
         const files: AttachmentBuilder[] = []
         
+        // Railway環境での地震マップ生成設定（高メモリ環境では有効化）
+        const skipMapGeneration = process.env.SKIP_MAP_GENERATION === 'true' || 
+                                 (process.env.RAILWAY === 'true' && process.env.FORCE_MAP_GENERATION !== 'true')
+        
+        if (skipMapGeneration) {
+            console.log('⚠️ 地震マップ生成をスキップ（SKIP_MAP_GENERATION=true または高メモリ設定未有効）')
+        } else {
+            console.log('🗺️ 地震マップ生成が有効です（高メモリ環境または開発環境）')
+        }
+        
         // 震度アイコンをembedに追加
         const maxScale = latestEarthquake.earthquake?.maxScale
         if (maxScale && maxScale !== 0) {
@@ -131,7 +141,7 @@ export async function execute(interaction: ChatInputCommandInteraction) {
             }
         }
         
-        if (mapData) {
+        if (mapData && !skipMapGeneration) {
             try {
                 // メモリ使用量をチェック
                 const memBefore = process.memoryUsage()

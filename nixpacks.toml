@@ -1,8 +1,26 @@
-# Nixpacks configuration for Railway
+# Nixpacks configuration for Railway - High Memory Canvas Build
 [phases.setup]
-nixPkgs = ["nodejs_18", "python3", "pkg-config", "cairo", "pango", "libpng", "jpeg", "giflib", "librsvg", "pixman", "ffmpeg", "libopus", "libsodium"]
+nixPkgs = [
+  "nodejs_18", 
+  "python3", 
+  "pkg-config", 
+  "cairo", 
+  "pango", 
+  "libpng", 
+  "jpeg", 
+  "giflib", 
+  "librsvg", 
+  "pixman", 
+  "freetype",
+  "vips",
+  "ffmpeg", 
+  "libopus", 
+  "libsodium"
+]
 
 [variables]
 NODE_ENV = "production"
 RAILWAY = "true"
-NODE_OPTIONS = "--max-old-space-size=1024"
+SKIP_MAP_GENERATION = "false"
+FORCE_MAP_GENERATION = "true"
+NODE_OPTIONS = "--max-old-space-size=6144"

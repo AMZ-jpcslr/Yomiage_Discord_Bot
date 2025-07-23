@@ -81,7 +81,13 @@ export async function generateEarthquakeMap(earthquakeData: EarthquakeData, area
         
         // メモリ管理: プロセス開始時のメモリ使用量をログ
         const memBefore = process.memoryUsage()
-        console.log(`Memory before map generation: ${Math.round(memBefore.heapUsed / 1024 / 1024)}MB`)
+        console.log(`Memory before map generation: ${Math.round(memBefore.heapUsed / 1024 / 1024)}MB / ${Math.round(memBefore.rss / 1024 / 1024)}MB RSS`)
+        
+        // Railway高メモリ環境での最適化設定
+        if (process.env.RAILWAY === 'true') {
+            console.log('🚀 Railway高メモリ環境での地震マップ生成を開始')
+            console.log(`Node.js heap limit: ${Math.round(require('v8').getHeapStatistics().heap_size_limit / 1024 / 1024)}MB`)
+        }
         
         // Use CommonJS-compatible dynamic import to avoid require() of ES modules
         const d3Module = await Function('return import("d3")')()
@@ -758,15 +764,15 @@ export async function generateEarthquakeMap(earthquakeData: EarthquakeData, area
         
         const filepath = path.join(outputDir, filename)
         
-        // Convert SVG to PNG with proper text rendering and memory optimization
-        console.log('Converting SVG to PNG with memory optimization...')
+        // Convert SVG to PNG with high memory optimization for Railway
+        console.log('Converting SVG to PNG with high memory optimization...')
         const baseImage = await sharp(Buffer.from(svgWithEncoding, 'utf8'))
             .png({
-                quality: 90,
+                quality: 95,
                 progressive: true,
-                compressionLevel: 9
+                compressionLevel: 6
             })
-            .resize(800, 600, { 
+            .resize(1200, 900, { 
                 fit: 'inside',
                 withoutEnlargement: true 
             })
@@ -774,7 +780,7 @@ export async function generateEarthquakeMap(earthquakeData: EarthquakeData, area
         
         // メモリ使用量をチェック
         const memAfter = process.memoryUsage()
-        console.log(`Memory after image processing: ${Math.round(memAfter.heapUsed / 1024 / 1024)}MB`)
+        console.log(`Memory after image processing: ${Math.round(memAfter.heapUsed / 1024 / 1024)}MB / ${Math.round(memAfter.rss / 1024 / 1024)}MB RSS`)
         
         // 震度アイコンは地図ではなくDiscord embedに表示するため、ここでは合成しない
         console.log(`地震マップ生成完了: 震度アイコンはembedに表示予定`)
@@ -783,9 +789,12 @@ export async function generateEarthquakeMap(earthquakeData: EarthquakeData, area
         await sharp(baseImage)
             .toFile(filepath)
         
-        // メモリクリーンアップを促進
-        if (global.gc) {
+        // Railway環境でのメモリクリーンアップを強化
+        if (process.env.RAILWAY === 'true' && global.gc) {
+            console.log('🧹 Railway環境でのメモリクリーンアップ実行')
             global.gc()
+            const memAfterGC = process.memoryUsage()
+            console.log(`Memory after GC: ${Math.round(memAfterGC.heapUsed / 1024 / 1024)}MB / ${Math.round(memAfterGC.rss / 1024 / 1024)}MB RSS`)
         }
         
         console.log('✅ 地震マップ画像を生成しました:', filename)
