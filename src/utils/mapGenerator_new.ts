@@ -99,13 +99,17 @@ export async function generateEarthquakeMap(earthquakeData: EarthquakeData, area
             console.log(`Used heap: ${Math.round(heapStats.used_heap_size / 1024 / 1024)}MB`)
             console.log(`Available heap: ${Math.round((heapStats.heap_size_limit - heapStats.used_heap_size) / 1024 / 1024)}MB`)
             
-            // メモリ不足の早期検出
+            // メモリ不足の早期検出（Railway環境ではより厳しく）
             const availableMemoryMB = Math.round((heapStats.heap_size_limit - heapStats.used_heap_size) / 1024 / 1024)
-            if (availableMemoryMB < 1000) {
-                console.warn(`⚠️ 利用可能メモリが${availableMemoryMB}MBと少ない状態です`)
+            const requiredMemoryMB = process.env.RAILWAY === 'true' ? 1500 : 1000  // Railway環境では1.5GB必要
+            
+            if (availableMemoryMB < requiredMemoryMB) {
+                console.warn(`⚠️ 利用可能メモリが${availableMemoryMB}MBと少ない状態です（必要: ${requiredMemoryMB}MB）`)
                 console.warn('⚠️ SIGSEGV防止のため処理を中止します')
-                throw new Error(`Insufficient memory for map generation: ${availableMemoryMB}MB available`)
+                throw new Error(`Insufficient memory for map generation: ${availableMemoryMB}MB available, ${requiredMemoryMB}MB required`)
             }
+            
+            console.log(`✅ メモリチェック通過: ${availableMemoryMB}MB利用可能（必要: ${requiredMemoryMB}MB）`)
             
             // 初期ガベージコレクションで最大メモリを確保
             if (global.gc) {
@@ -292,9 +296,32 @@ export async function generateEarthquakeMap(earthquakeData: EarthquakeData, area
         console.log(`最終スケール: ${def_scale * _scale}`)
         console.log(`→ より広域表示のため縮尺を調整しました`)
         
-        // Simplify geojson data with higher resolution for better map accuracy
-        // 新しいprefectures.geojsonファイル用の最適化された解像度設定
-        const data = simplify(mapData, Math.min(resolution * 0.1, 0.001))
+        // Simplify geojson data with aggressive simplification for SIGSEGV prevention
+        // Railway環境での安定性を優先して解像度を大幅に削減
+        const simplificationTolerance = process.env.RAILWAY === 'true' ? 
+            Math.max(resolution * 0.5, 0.01) :  // Railway: 大幅簡素化
+            Math.min(resolution * 0.1, 0.001)   // ローカル: 高精度
+            
+        console.log(`地図簡素化設定: tolerance=${simplificationTolerance} (Railway=${process.env.RAILWAY})`)
+        
+        const data = simplify(mapData, simplificationTolerance)
+        
+        // 簡素化後のデータサイズをチェック
+        const dataSize = JSON.stringify(data).length
+        console.log(`簡素化後地図データサイズ: ${Math.round(dataSize / 1024)}KB`)
+        
+        if (dataSize > 512 * 1024) { // 512KB制限
+            console.warn(`⚠️ 地図データが大きすぎます: ${Math.round(dataSize / 1024)}KB`)
+            // 更なる簡素化
+            const ultraSimplified = simplify(mapData, simplificationTolerance * 5)
+            const ultraSize = JSON.stringify(ultraSimplified).length
+            console.log(`超簡素化後サイズ: ${Math.round(ultraSize / 1024)}KB`)
+            
+            if (ultraSize < dataSize) {
+                console.log('超簡素化版を採用')
+                Object.assign(data, ultraSimplified)
+            }
+        }
         
         // Setup map projection (earthquake-alert/map-draw style) with improved accuracy
         const aProjection = d3.geoMercator()
@@ -781,8 +808,35 @@ export async function generateEarthquakeMap(earthquakeData: EarthquakeData, area
         // Get SVG as HTML string with proper encoding
         const svgHtml = document.body.innerHTML
         
+        // SVGの最適化とサイズ削減
+        const optimizedSvg = svgHtml
+            .replace(/\s+/g, ' ')           // 連続する空白を単一スペースに
+            .replace(/>\s+</g, '><')        // タグ間の空白を削除
+            .replace(/\s+([>\/])/g, '$1')   // タグ終了前の空白を削除
+            .trim()
+        
         // Add XML declaration and proper encoding for Japanese text
-        const svgWithEncoding = `<?xml version="1.0" encoding="UTF-8"?>\n${svgHtml}`
+        const svgWithEncoding = `<?xml version="1.0" encoding="UTF-8"?>\n${optimizedSvg}`
+        
+        // SVGサイズの事前チェック
+        const estimatedSize = Buffer.byteLength(svgWithEncoding, 'utf8')
+        console.log(`最適化後SVGサイズ: ${Math.round(estimatedSize / 1024)}KB`)
+        
+        if (estimatedSize > 2048 * 1024) { // 2MB制限
+            console.warn(`⚠️ SVGサイズが大きすぎます: ${Math.round(estimatedSize / 1024)}KB`)
+            // 更なる最適化を試行
+            const furtherOptimized = optimizedSvg
+                .replace(/stroke-width="[^"]*"/g, 'stroke-width="1"')
+                .replace(/style="[^"]*opacity:\s*[0-9.]+[^"]*"/g, '')
+                .replace(/filter="[^"]*"/g, '')
+            const finalSvg = `<?xml version="1.0" encoding="UTF-8"?>\n${furtherOptimized}`
+            const finalSize = Buffer.byteLength(finalSvg, 'utf8')
+            console.log(`更なる最適化後SVGサイズ: ${Math.round(finalSize / 1024)}KB`)
+            
+            if (finalSize > 1536 * 1024) { // 1.5MB制限
+                throw new Error(`SVG too large even after optimization: ${Math.round(finalSize / 1024)}KB`)
+            }
+        }
         
         // Convert SVG to PNG using Sharp
         const timestamp = Date.now()
@@ -827,25 +881,74 @@ export async function generateEarthquakeMap(earthquakeData: EarthquakeData, area
             // SIGSEGV防止のため、Sharp処理を最小限の設定で実行
             console.log('Stage 1: SVG to PNG conversion with safety limits...')
             
-            // Sharp処理をtry-catchで囲み、タイムアウトも設定
-            const pngBuffer = await Promise.race([
-                sharp(svgBuffer, {
-                    limitInputPixels: 268402689, // 約16K×16K制限
-                    sequentialRead: true
+            // SVGサイズが大きすぎる場合は処理を中止
+            if (svgBuffer.length > 1024 * 1024 * 3) { // 3MB制限
+                console.error(`❌ SVGバッファが大きすぎます: ${Math.round(svgBuffer.length / 1024)}KB > 3MB`)
+                throw new Error(`SVG buffer too large: ${Math.round(svgBuffer.length / 1024)}KB`)
+            }
+            
+            // Sharp処理をより保守的な設定で実行
+            console.log('🛡️ 超安全モードでSharp処理を開始')
+            let pngBuffer: Buffer
+            
+            try {
+                // まず最小限の設定でテスト
+                const testSharp = sharp(svgBuffer, {
+                    limitInputPixels: 67108864, // 約8K×8K制限（更に削減）
+                    sequentialRead: true,
+                    failOn: 'none', // エラー時も継続
+                    animated: false
                 })
-                .png({
-                    quality: 80,          // 品質を下げてメモリ使用量削減
-                    progressive: false,
-                    compressionLevel: 6,  // バランス重視
-                    adaptiveFiltering: false  // 高速化
-                })
-                .toBuffer(),
                 
-                // 30秒タイムアウト
-                new Promise<never>((_, reject) => 
-                    setTimeout(() => reject(new Error('Sharp PNG conversion timeout')), 30000)
-                )
-            ])
+                // テスト用の小さなバッファで動作確認
+                const metaData = await testSharp.metadata()
+                console.log(`Sharp metadata取得成功: ${metaData.width}x${metaData.height}`)
+                
+                // メタデータ取得成功後、実際の変換を実行
+                pngBuffer = await Promise.race([
+                    testSharp
+                    .png({
+                        quality: 70,          // 品質を更に下げてメモリ使用量削減
+                        progressive: false,
+                        compressionLevel: 9,  // 最大圧縮でメモリ効率化
+                        adaptiveFiltering: false,
+                        force: true
+                    })
+                    .toBuffer(),
+                    
+                    // 15秒タイムアウト（短縮）
+                    new Promise<never>((_, reject) => 
+                        setTimeout(() => reject(new Error('Sharp PNG conversion timeout (15s)')), 15000)
+                    )
+                ])
+                
+            } catch (sharpInitError) {
+                console.error('❌ Sharp初期化エラー:', sharpInitError)
+                // フォールバック: より小さなピクセル制限で再試行
+                console.log('🔄 フォールバックモードで再試行')
+                
+                pngBuffer = await Promise.race([
+                    sharp(svgBuffer, {
+                        limitInputPixels: 16777216, // 約4K×4K制限（極端に削減）
+                        sequentialRead: true,
+                        failOn: 'none',
+                        animated: false
+                    })
+                    .png({
+                        quality: 60,          // 更に品質を下げる
+                        progressive: false,
+                        compressionLevel: 9,
+                        adaptiveFiltering: false,
+                        force: true
+                    })
+                    .toBuffer(),
+                    
+                    // 10秒タイムアウト（更に短縮）
+                    new Promise<never>((_, reject) => 
+                        setTimeout(() => reject(new Error('Sharp fallback timeout (10s)')), 10000)
+                    )
+                ])
+            }
             
             console.log(`PNG buffer size: ${Math.round(pngBuffer.length / 1024)}KB`)
             
