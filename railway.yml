@@ -4,8 +4,6 @@
 # ビルド設定 - Nixpacks優先、Dockerフォールバック
 build:
   builder: nixpacks
-  buildCommand: npm run build
-  startCommand: npm run start:railway
 
 # 環境変数
 environment:
