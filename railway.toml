@@ -1,0 +1,17 @@
+# Railway.app configuration
+[build]
+builder = "NIXPACKS"
+
+[build.buildCommand]
+cmd = "npm run build"
+
+[build.startCommand] 
+cmd = "npm run start:railway"
+
+[deploy]
+healthcheckPath = "/"
+healthcheckTimeout = 300
+
+[environment]
+NODE_ENV = "production"
+RAILWAY = "true"

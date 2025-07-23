@@ -1,9 +1,11 @@
 # Railway プロジェクト設定
 # このファイルをプロジェクトルートに配置
 
-# ビルド設定
+# ビルド設定 - Nixpacks優先、Dockerフォールバック
 build:
-  dockerfile: Dockerfile
+  builder: nixpacks
+  buildCommand: npm run build
+  startCommand: npm run start:railway
 
 # 環境変数
 environment:
@@ -14,10 +16,10 @@ environment:
   # VoiceVox Web API設定
   # VOICEVOX_API_KEY: "your-api-key-here"  # デプロイ時に設定
 
-# リソース設定
+# リソース設定 - メモリ制限を削減
 resources:
-  memory: 3072
-  cpu: 1000
+  memory: 2048
+  cpu: 500
 
 # ヘルスチェック
 healthcheck:

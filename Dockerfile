@@ -1,91 +1,61 @@
-# Discord Bot for Railway Deployment - Multi-stage build
-# Stage 1: Build stage
-FROM node:18-alpine AS builder
-
-# Install build dependencies
-RUN apk add --no-cache --virtual .build-deps \
-    cairo-dev \
-    jpeg-dev \
-    pango-dev \
-    musl-dev \
-    giflib-dev \
-    pixman-dev \
-    pangomm-dev \
-    libjpeg-turbo-dev \
-    freetype-dev \
-    python3 \
-    make \
-    g++
-
-WORKDIR /app
-
-# Copy package files
-COPY package*.json ./
-
-# Install all dependencies (including devDependencies for build)
-RUN npm ci --silent
-
-# Copy source code
-COPY src/ ./src/
-COPY tsconfig.json ./
-
-# Build TypeScript
-RUN npx tsc -p .
-
-# Stage 2: Production stage
+# Discord Bot for Railway - Simplified Deployment
 FROM node:18-alpine
 
-# Install essential packages first
+# Install minimal runtime dependencies
 RUN apk add --no-cache \
     ffmpeg \
     cairo \
     jpeg \
     pango \
-    giflib \
     pixman \
-    libjpeg-turbo \
     freetype \
-    opus-dev \
-    libsodium-dev
+    opus \
+    libsodium
+
+# Install build dependencies for canvas (will be removed later)
+RUN apk add --no-cache --virtual .build-deps \
+    cairo-dev \
+    jpeg-dev \
+    pango-dev \
+    pixman-dev \
+    freetype-dev \
+    python3 \
+    make \
+    g++ \
+    npm
 
 WORKDIR /app
-
-# Set memory optimization environment variables
-ENV NODE_OPTIONS="--max-old-space-size=1024 --optimize-for-size"
-ENV SHARP_IGNORE_GLOBAL_LIBVIPS=1
-ENV SHARP_FORCE_GLOBAL_LIBVIPS=false
-ENV NPM_CONFIG_LOGLEVEL=error
 
 # Copy package files
 COPY package*.json ./
 
-# Install only production dependencies
-RUN npm config set fund false && \
-    npm config set audit false && \
-    npm config set progress false && \
-    npm ci --only=production --no-optional --prefer-offline --silent
+# Install dependencies (Railway has better memory management)
+RUN npm install --production --silent
 
-# Copy built application from builder stage
-COPY --from=builder /app/build ./build
+# Copy source and config files (Railway will handle TypeScript build)
+COPY . .
 
-# Copy configuration files
-COPY scripts/ ./scripts/
-COPY config/ ./config/
-COPY data/ ./data/
+# Build TypeScript if needed
+RUN if [ ! -d "build" ] || [ ! -f "build/main.js" ]; then \
+        npm install typescript --no-save && \
+        npx tsc && \
+        npm uninstall typescript; \
+    fi
 
-# Create directory for generated images
+# Clean up build dependencies
+RUN apk del .build-deps && \
+    npm cache clean --force
+
+# Create required directories
 RUN mkdir -p generated_images
-
-# Clean up cache
-RUN npm cache clean --force && \
-    rm -rf /tmp/* /var/cache/apk/*
-
-# Expose port (Railway will set PORT environment variable)
-EXPOSE $PORT
 
 # Set environment variables
 ENV NODE_ENV=production
 ENV RAILWAY=true
+ENV NODE_OPTIONS="--max-old-space-size=512"
 
-# Start the application
+# Expose port
+EXPOSE 3000
+
+# Start command
 CMD ["npm", "run", "start:railway"]
