@@ -9,7 +9,6 @@ README.md
 coverage
 .cache
 dist
-# build <- buildディレクトリはコピーする（事前ビルド用）
 logs
 *.log
 .DS_Store
@@ -31,3 +30,5 @@ VOICE_WEB_API_SETUP.md
 
 # Development files
 eslint.config.mjs
+
+# Note: build/ directory will be copied if it exists

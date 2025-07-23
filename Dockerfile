@@ -1,7 +1,20 @@
 # Discord Bot for Railway Deployment
 FROM node:18-alpine
 
-# Install canvas dependencies and FFmpeg for Alpine Linux with minimal packages
+# Install essential packages first
+RUN apk add --no-cache \
+    ffmpeg \
+    cairo \
+    jpeg \
+    pango \
+    giflib \
+    pixman \
+    libjpeg-turbo \
+    freetype \
+    opus-dev \
+    libsodium-dev
+
+# Install build dependencies in separate layer
 RUN apk add --no-cache --virtual .build-deps \
     cairo-dev \
     jpeg-dev \
@@ -14,20 +27,7 @@ RUN apk add --no-cache --virtual .build-deps \
     freetype-dev \
     python3 \
     make \
-    g++ \
-    vips-dev && \
-    apk add --no-cache \
-    ffmpeg \
-    opus-dev \
-    libsodium-dev \
-    cairo \
-    jpeg \
-    pango \
-    giflib \
-    pixman \
-    libjpeg-turbo \
-    freetype \
-    vips
+    g++
 
 # Set working directory
 WORKDIR /app
@@ -44,24 +44,25 @@ COPY package*.json ./
 # Install dependencies with memory optimization
 RUN npm config set fund false && \
     npm config set audit false && \
-    npm ci --only=production --no-optional --prefer-offline
+    npm config set progress false && \
+    npm ci --only=production --no-optional --prefer-offline --silent
 
-# Copy source code and pre-built files
+# Copy source code and configuration files
 COPY src/ ./src/
-COPY build/ ./build/
 COPY tsconfig.json ./
 COPY scripts/ ./scripts/
 COPY config/ ./config/
 COPY data/ ./data/
 
-# Only build if build directory doesn't exist or is incomplete
-RUN if [ ! -d "./build" ] || [ ! -f "./build/main.js" ]; then \
-        echo "Building TypeScript..."; \
-        npm install typescript --no-save --prefer-offline && \
+# Copy build directory if it exists, otherwise prepare for building
+COPY build/ ./build/
+RUN if [ -f "./build/main.js" ]; then \
+        echo "✅ Using pre-built files"; \
+    else \
+        echo "📦 Building TypeScript in container..."; \
+        npm install typescript@5.8.3 --no-save --prefer-offline && \
         npx tsc -p . && \
         npm uninstall typescript; \
-    else \
-        echo "Using pre-built files"; \
     fi
 
 # Create directory for generated images
