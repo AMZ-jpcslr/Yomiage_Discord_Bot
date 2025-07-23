@@ -76,6 +76,9 @@ interface AreaInfo {
 }
 
 export async function generateEarthquakeMap(earthquakeData: EarthquakeData, areaInfo?: AreaInfo): Promise<string> {
+    let d3Module: any = null
+    let d3GeoModule: any = null
+    
     try {
         console.log('Starting earthquake map generation...')
         
@@ -90,8 +93,13 @@ export async function generateEarthquakeMap(earthquakeData: EarthquakeData, area
         }
         
         // Use CommonJS-compatible dynamic import to avoid require() of ES modules
-        const d3Module = await Function('return import("d3")')()
-        const d3GeoModule = await Function('return import("d3-geo")')()
+        try {
+            d3Module = await Function('return import("d3")')()
+            d3GeoModule = await Function('return import("d3-geo")')()
+        } catch (importError) {
+            console.error('❌ D3モジュールのインポートエラー:', importError)
+            throw new Error(`D3 import failed: ${importError}`)
+        }
         
         // Create d3 object similar to earthquake-alert/map-draw
         const d3 = Object.assign({}, d3Module, d3GeoModule)
@@ -766,17 +774,24 @@ export async function generateEarthquakeMap(earthquakeData: EarthquakeData, area
         
         // Convert SVG to PNG with high memory optimization for Railway
         console.log('Converting SVG to PNG with high memory optimization...')
-        const baseImage = await sharp(Buffer.from(svgWithEncoding, 'utf8'))
-            .png({
-                quality: 95,
-                progressive: true,
-                compressionLevel: 6
-            })
-            .resize(1200, 900, { 
-                fit: 'inside',
-                withoutEnlargement: true 
-            })
-            .toBuffer()
+        
+        let baseImage: Buffer
+        try {
+            baseImage = await sharp(Buffer.from(svgWithEncoding, 'utf8'))
+                .png({
+                    quality: 95,
+                    progressive: true,
+                    compressionLevel: 6
+                })
+                .resize(1200, 900, { 
+                    fit: 'inside',
+                    withoutEnlargement: true 
+                })
+                .toBuffer()
+        } catch (sharpError) {
+            console.error('❌ Sharp処理エラー:', sharpError)
+            throw new Error(`Sharp processing failed: ${sharpError}`)
+        }
         
         // メモリ使用量をチェック
         const memAfter = process.memoryUsage()
@@ -786,8 +801,13 @@ export async function generateEarthquakeMap(earthquakeData: EarthquakeData, area
         console.log(`地震マップ生成完了: 震度アイコンはembedに表示予定`)
         
         // 最終画像を保存
-        await sharp(baseImage)
-            .toFile(filepath)
+        try {
+            await sharp(baseImage)
+                .toFile(filepath)
+        } catch (saveError) {
+            console.error('❌ 画像保存エラー:', saveError)
+            throw new Error(`Image save failed: ${saveError}`)
+        }
         
         // Railway環境でのメモリクリーンアップを強化
         if (process.env.RAILWAY === 'true' && global.gc) {

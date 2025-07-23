@@ -147,9 +147,16 @@ export async function execute(interaction: ChatInputCommandInteraction) {
                 const memBefore = process.memoryUsage()
                 console.log(`🧠 地震マップ生成前のメモリ使用量: ${Math.round(memBefore.heapUsed / 1024 / 1024)}MB`)
                 
-                // 地震マップを生成（震度分布付き）
+                // Railway環境での安全な地震マップ生成
                 console.log('🗺️ 震度分布付き地震マップ生成中...')
-                const mapImagePath = await generateEarthquakeMap(mapData.earthquakeData, mapData.areaInfo)
+                
+                // タイムアウト付きでマップ生成を実行
+                const mapPromise = generateEarthquakeMap(mapData.earthquakeData, mapData.areaInfo)
+                const timeoutPromise = new Promise((_, reject) => 
+                    setTimeout(() => reject(new Error('Map generation timeout')), 30000)
+                )
+                
+                const mapImagePath = await Promise.race([mapPromise, timeoutPromise]) as string
                 
                 if (mapImagePath) {
                     const attachment = new AttachmentBuilder(mapImagePath, { name: 'earthquake_intensity_map.png' })
@@ -169,11 +176,33 @@ export async function execute(interaction: ChatInputCommandInteraction) {
                         })
                     }
                 } else {
-                    console.log('⚠️ 震度分布地震マップ生成に失敗しました')
+                    console.log('⚠️ 震度分布地震マップ生成に失敗しました（タイムアウトまたは処理エラー）')
                 }
             } catch (mapError) {
                 console.error('❌ 震度分布地震マップ生成エラー:', mapError)
-                console.log('💡 震度分布データ:', JSON.stringify(mapData.areaInfo, null, 2))
+                
+                // SIGSEGVやメモリエラーの詳細ログ
+                if (mapError instanceof Error) {
+                    console.error('❌ エラー詳細:', mapError.message)
+                    console.error('❌ スタック:', mapError.stack)
+                }
+                
+                // メモリ状況を確認
+                const memError = process.memoryUsage()
+                console.error(`🧠 エラー時メモリ: ${Math.round(memError.heapUsed / 1024 / 1024)}MB / ${Math.round(memError.rss / 1024 / 1024)}MB RSS`)
+                
+                // 強制ガベージコレクション
+                if (global.gc) {
+                    try {
+                        global.gc()
+                        console.log('🧹 エラー後ガベージコレクション実行')
+                    } catch (gcError) {
+                        console.error('❌ ガベージコレクションエラー:', gcError)
+                    }
+                }
+                
+                // 地震マップなしでも情報は表示する
+                console.log('📋 地震マップ生成失敗のため、テキスト情報のみで継続します')
             }
         } else {
             console.log('⚠️ 地震マップデータの変換に失敗しました（震度情報が不完全な可能性）')
