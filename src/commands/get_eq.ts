@@ -143,17 +143,31 @@ export async function execute(interaction: ChatInputCommandInteraction) {
         
         if (mapData && !skipMapGeneration) {
             try {
+                // マップ生成専用のメモリ確保
+                console.log('🧠 地震マップ生成用メモリ準備中...')
+                
+                // 事前ガベージコレクションで最大メモリを確保
+                if (global.gc) {
+                    global.gc()
+                    console.log('🧹 マップ生成前GC実行')
+                }
+                
                 // メモリ使用量をチェック
                 const memBefore = process.memoryUsage()
-                console.log(`🧠 地震マップ生成前のメモリ使用量: ${Math.round(memBefore.heapUsed / 1024 / 1024)}MB`)
+                const heapStats = require('v8').getHeapStatistics()
+                console.log(`🧠 マップ生成前メモリ状況:`)
+                console.log(`  Heap Used: ${Math.round(memBefore.heapUsed / 1024 / 1024)}MB`)
+                console.log(`  RSS: ${Math.round(memBefore.rss / 1024 / 1024)}MB`)
+                console.log(`  Heap Limit: ${Math.round(heapStats.heap_size_limit / 1024 / 1024)}MB`)
+                console.log(`  Available: ${Math.round((heapStats.heap_size_limit - heapStats.used_heap_size) / 1024 / 1024)}MB`)
                 
                 // Railway環境での安全な地震マップ生成
                 console.log('🗺️ 震度分布付き地震マップ生成中...')
                 
-                // タイムアウト付きでマップ生成を実行
+                // タイムアウト付きでマップ生成を実行（45秒に延長）
                 const mapPromise = generateEarthquakeMap(mapData.earthquakeData, mapData.areaInfo)
                 const timeoutPromise = new Promise((_, reject) => 
-                    setTimeout(() => reject(new Error('Map generation timeout')), 30000)
+                    setTimeout(() => reject(new Error('Map generation timeout (45s)')), 45000)
                 )
                 
                 const mapImagePath = await Promise.race([mapPromise, timeoutPromise]) as string
@@ -165,6 +179,10 @@ export async function execute(interaction: ChatInputCommandInteraction) {
                     // 地図画像を埋め込みの画像として設定
                     embed.setImage('attachment://earthquake_intensity_map.png')
                     console.log('✅ 震度分布地震マップ生成成功（埋め込み画像として設定）:', mapImagePath)
+                    
+                    // 生成後のメモリ状況確認
+                    const memAfterMap = process.memoryUsage()
+                    console.log(`🧠 マップ生成後メモリ: ${Math.round(memAfterMap.heapUsed / 1024 / 1024)}MB / ${Math.round(memAfterMap.rss / 1024 / 1024)}MB RSS`)
                     
                     // 震度分布の詳細をログ出力
                     if (mapData.areaInfo.areas) {

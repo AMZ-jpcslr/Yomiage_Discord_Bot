@@ -49,12 +49,12 @@ RUN NODE_OPTIONS="--max-old-space-size=4096" npm install typescript --no-save &&
 # Clean up build dependencies but keep runtime libs
 RUN apk del .build-deps
 
-# Set high memory environment
+# Set maximum memory environment for map generation
 ENV NODE_ENV=production
 ENV RAILWAY=true
 ENV SKIP_MAP_GENERATION=false
 ENV FORCE_MAP_GENERATION=true
-ENV NODE_OPTIONS="--max-old-space-size=6144"
+ENV NODE_OPTIONS="--max-old-space-size=7168 --max-semi-space-size=512 --expose-gc --optimize-for-size"
 
 # Create directories
 RUN mkdir -p generated_images

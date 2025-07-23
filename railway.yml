@@ -5,13 +5,13 @@
 build:
   builder: nixpacks
 
-# 環境変数 - 安全な動作のため地震マップ一時無効化
+# 環境変数 - マップ生成専用メモリ最適化
 environment:
   NODE_ENV: production
   RAILWAY: true
-  SKIP_MAP_GENERATION: true
-  FORCE_MAP_GENERATION: false
-  NODE_OPTIONS: "--max-old-space-size=4096 --expose-gc"
+  SKIP_MAP_GENERATION: false
+  FORCE_MAP_GENERATION: true
+  NODE_OPTIONS: "--max-old-space-size=7168 --max-semi-space-size=512 --expose-gc --optimize-for-size"
   # VoiceVox Web API設定
   # VOICEVOX_API_KEY: "your-api-key-here"  # デプロイ時に設定
 

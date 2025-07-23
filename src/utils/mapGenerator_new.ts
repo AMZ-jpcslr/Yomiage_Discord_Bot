@@ -89,7 +89,18 @@ export async function generateEarthquakeMap(earthquakeData: EarthquakeData, area
         // Railway高メモリ環境での最適化設定
         if (process.env.RAILWAY === 'true') {
             console.log('🚀 Railway高メモリ環境での地震マップ生成を開始')
-            console.log(`Node.js heap limit: ${Math.round(require('v8').getHeapStatistics().heap_size_limit / 1024 / 1024)}MB`)
+            const heapStats = require('v8').getHeapStatistics()
+            console.log(`Node.js heap limit: ${Math.round(heapStats.heap_size_limit / 1024 / 1024)}MB`)
+            console.log(`Used heap: ${Math.round(heapStats.used_heap_size / 1024 / 1024)}MB`)
+            console.log(`Available heap: ${Math.round((heapStats.heap_size_limit - heapStats.used_heap_size) / 1024 / 1024)}MB`)
+            
+            // 初期ガベージコレクションで最大メモリを確保
+            if (global.gc) {
+                console.log('🧹 初期GC実行でメモリ最大化')
+                global.gc()
+                const memAfterInitGC = process.memoryUsage()
+                console.log(`Memory after init GC: ${Math.round(memAfterInitGC.heapUsed / 1024 / 1024)}MB / ${Math.round(memAfterInitGC.rss / 1024 / 1024)}MB RSS`)
+            }
         }
         
         // Use CommonJS-compatible dynamic import to avoid require() of ES modules
@@ -772,25 +783,64 @@ export async function generateEarthquakeMap(earthquakeData: EarthquakeData, area
         
         const filepath = path.join(outputDir, filename)
         
-        // Convert SVG to PNG with high memory optimization for Railway
-        console.log('Converting SVG to PNG with high memory optimization...')
+        // Convert SVG to PNG with maximum memory allocation for Railway
+        console.log('Converting SVG to PNG with maximum memory allocation...')
+        
+        // マップ生成前に強制ガベージコレクション
+        if (global.gc) {
+            console.log('🧹 マップ生成前の強制GC実行')
+            global.gc()
+            const memAfterGC = process.memoryUsage()
+            console.log(`Memory after pre-GC: ${Math.round(memAfterGC.heapUsed / 1024 / 1024)}MB / ${Math.round(memAfterGC.rss / 1024 / 1024)}MB RSS`)
+        }
         
         let baseImage: Buffer
         try {
-            baseImage = await sharp(Buffer.from(svgWithEncoding, 'utf8'))
+            // SVGバッファを事前に準備
+            const svgBuffer = Buffer.from(svgWithEncoding, 'utf8')
+            console.log(`SVG buffer size: ${Math.round(svgBuffer.length / 1024)}KB`)
+            
+            // Sharp処理を段階的に実行してメモリ効率を改善
+            console.log('Stage 1: SVG to PNG conversion...')
+            const pngBuffer = await sharp(svgBuffer)
                 .png({
-                    quality: 95,
+                    quality: 90,
+                    progressive: false,
+                    compressionLevel: 1  // 高速化優先
+                })
+                .toBuffer()
+            
+            console.log(`PNG buffer size: ${Math.round(pngBuffer.length / 1024)}KB`)
+            
+            // 中間GC
+            if (global.gc) {
+                global.gc()
+            }
+            
+            console.log('Stage 2: Resizing...')
+            baseImage = await sharp(pngBuffer)
+                .resize(1000, 750, { 
+                    fit: 'inside',
+                    withoutEnlargement: true,
+                    kernel: sharp.kernel.nearest  // 高速化
+                })
+                .png({
+                    quality: 85,
                     progressive: true,
                     compressionLevel: 6
                 })
-                .resize(1200, 900, { 
-                    fit: 'inside',
-                    withoutEnlargement: true 
-                })
                 .toBuffer()
+                
         } catch (sharpError) {
             console.error('❌ Sharp処理エラー:', sharpError)
-            throw new Error(`Sharp processing failed: ${sharpError}`)
+            const errorMessage = sharpError instanceof Error ? sharpError.message : String(sharpError)
+            console.error('❌ エラー詳細:', errorMessage)
+            
+            // エラー時のメモリ状況
+            const errorMem = process.memoryUsage()
+            console.error(`❌ エラー時メモリ: ${Math.round(errorMem.heapUsed / 1024 / 1024)}MB / ${Math.round(errorMem.rss / 1024 / 1024)}MB RSS`)
+            
+            throw new Error(`Sharp processing failed: ${errorMessage}`)
         }
         
         // メモリ使用量をチェック
