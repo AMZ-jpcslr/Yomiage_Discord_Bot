@@ -9,7 +9,7 @@ README.md
 coverage
 .cache
 dist
-# build <- buildディレクトリは除外しない（コンテナ内でビルドするため）
+# build <- buildディレクトリはコピーする（事前ビルド用）
 logs
 *.log
 .DS_Store
@@ -26,8 +26,8 @@ SETUP_CHECKLIST.md
 START_NOW.md
 VOICE_WEB_API_SETUP.md
 
-# Generated files
-generated_images/
+# Generated files (keep generated_images out but allow in container creation)
+# generated_images/
 
 # Development files
 eslint.config.mjs
