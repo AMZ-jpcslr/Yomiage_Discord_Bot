@@ -1,0 +1,62 @@
+# Railway Optimized Dockerfile for Discord Bot with Canvas
+FROM node:18-alpine
+
+# Install essential runtime dependencies
+RUN apk add --no-cache \
+    ffmpeg \
+    opus \
+    libsodium \
+    cairo \
+    jpeg \
+    pango \
+    pixman \
+    freetype \
+    giflib
+
+# Install build dependencies temporarily
+RUN apk add --no-cache --virtual .build-deps \
+    cairo-dev \
+    jpeg-dev \
+    pango-dev \
+    pixman-dev \
+    freetype-dev \
+    giflib-dev \
+    python3 \
+    make \
+    g++ \
+    pkgconfig
+
+WORKDIR /app
+
+# Copy package files first for better layer caching
+COPY package*.json ./
+COPY tsconfig.json ./
+
+# Install dependencies with memory optimization
+RUN npm config set fund false && \
+    npm config set audit false && \
+    NODE_OPTIONS="--max-old-space-size=4096" npm ci --verbose
+
+# Copy source code
+COPY src/ ./src/
+COPY data/ ./data/
+COPY config/ ./config/
+
+# Build TypeScript with high memory allocation
+RUN NODE_OPTIONS="--max-old-space-size=4096" npm run build
+
+# Clean up unnecessary files to reduce image size
+RUN rm -rf src/ tsconfig.json && \
+    npm prune --production && \
+    apk del .build-deps
+
+# Create directories for runtime
+RUN mkdir -p generated_images
+
+# Railway environment configuration
+ENV NODE_ENV=production
+ENV RAILWAY=true
+ENV FORCE_MAP_GENERATION=true
+
+# Start with optimized memory settings
+CMD ["npm", "run", "start:railway"]

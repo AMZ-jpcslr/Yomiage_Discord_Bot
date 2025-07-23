@@ -100,6 +100,10 @@ export async function generateEarthquakeMap(earthquakeData: EarthquakeData, area
                 global.gc()
                 const memAfterInitGC = process.memoryUsage()
                 console.log(`Memory after init GC: ${Math.round(memAfterInitGC.heapUsed / 1024 / 1024)}MB / ${Math.round(memAfterInitGC.rss / 1024 / 1024)}MB RSS`)
+            } else {
+                console.log('⚠️ ガベージコレクション無効 - 代替メモリ管理を使用')
+                // setImmediateでイベントループをクリア
+                await new Promise(resolve => setImmediate(resolve))
             }
         }
         
@@ -792,6 +796,9 @@ export async function generateEarthquakeMap(earthquakeData: EarthquakeData, area
             global.gc()
             const memAfterGC = process.memoryUsage()
             console.log(`Memory after pre-GC: ${Math.round(memAfterGC.heapUsed / 1024 / 1024)}MB / ${Math.round(memAfterGC.rss / 1024 / 1024)}MB RSS`)
+        } else {
+            console.log('⚠️ GC無効 - setImmediateでイベントループクリーンアップ')
+            await new Promise(resolve => setImmediate(resolve))
         }
         
         let baseImage: Buffer
