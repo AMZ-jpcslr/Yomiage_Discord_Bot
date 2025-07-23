@@ -4,10 +4,59 @@
 
 import { Client, TextChannel, EmbedBuilder, AttachmentBuilder } from 'discord.js'
 import { fetchAllP2PData, convertP2PDataToMapData, createP2PEarthquakeEmbed, P2PQuakeData, P2P_CODES } from './utils/p2p_earthquake'
-import { generateEarthquakeMap } from './utils/mapGenerator_new'
+import { generateEarthquakeMapSVG } from './utils/mapGenerator_svg'
 import { getIntensityIconPath } from './utils/intensityIcon'
 import * as fs from 'fs'
 import * as path from 'path'
+
+// P2P地震情報のLocation型（SVGマップ生成用）
+interface Location {
+    name: string
+    fullAddress: string
+    lat: number
+    lng: number
+    intensityLevel: string
+}
+
+// P2P地震情報の地図データをSVG生成用のLocation[]に変換
+function convertP2PToLocations(areaInfo: any): Location[] {
+    const locations: Location[] = []
+    
+    // detailedAreasがある場合はそれを使用（より詳細）
+    if (areaInfo.detailedAreas) {
+        Object.entries(areaInfo.detailedAreas).forEach(([intensityLevel, areas]: [string, any]) => {
+            if (Array.isArray(areas)) {
+                areas.forEach(area => {
+                    locations.push({
+                        name: area.city || '不明',
+                        fullAddress: area.fullAddress || `${area.prefecture}${area.city}`,
+                        lat: area.coordinates[1], // [lng, lat] -> lat
+                        lng: area.coordinates[0], // [lng, lat] -> lng
+                        intensityLevel: intensityLevel
+                    })
+                })
+            }
+        })
+    } else if (areaInfo.areas) {
+        // フォールバック: 通常のareasデータを使用
+        Object.entries(areaInfo.areas).forEach(([intensityLevel, coords]: [string, any]) => {
+            if (Array.isArray(coords)) {
+                coords.forEach((coord: [number, number], index: number) => {
+                    locations.push({
+                        name: `観測点${index + 1}`,
+                        fullAddress: `震度${intensityLevel}観測点`,
+                        lat: coord[1], // [lng, lat] -> lat
+                        lng: coord[0], // [lng, lat] -> lng
+                        intensityLevel: intensityLevel
+                    })
+                })
+            }
+        })
+    }
+    
+    console.log(`🗾 SVG用に${locations.length}箇所の観測点データを変換`)
+    return locations
+}
 
 interface EQChannelConfig {
     [guildId: string]: string
@@ -574,14 +623,21 @@ async function sendP2PNotification(client: Client, p2pData: P2PQuakeData, isInco
                     console.log(`  - 震度エリア数: ${Object.keys(mapData.areaInfo.areas).length}`)
                     console.log(`  - 詳細エリア数: ${Object.keys(mapData.areaInfo.detailedAreas || {}).length}`)
                     
-                    const mapImagePath = await generateEarthquakeMap(mapData.earthquakeData, mapData.areaInfo)
+                    // P2P地震情報データをSVG用のLocation[]に変換
+                    const locations = convertP2PToLocations(mapData.areaInfo)
+                    const outputDir = path.join(process.cwd(), 'generated_images')
+                    
+                    const mapImagePath = await generateEarthquakeMapSVG(locations, outputDir)
                     if (mapImagePath) {
-                        const attachment = new AttachmentBuilder(mapImagePath, { name: 'earthquake_map.png' })
+                        // SVGファイルの場合は拡張子を正しく設定
+                        const isMapSVG = mapImagePath.endsWith('.svg')
+                        const attachmentName = isMapSVG ? 'earthquake_map.svg' : 'earthquake_map.png'
+                        const attachment = new AttachmentBuilder(mapImagePath, { name: attachmentName })
                         files.push(attachment)
                         
                         // 地図画像を埋め込みの画像として設定
-                        embed.setImage('attachment://earthquake_map.png')
-                        console.log('🗾 地震マップ生成成功（埋め込み画像として設定）')
+                        embed.setImage(`attachment://${attachmentName}`)
+                        console.log(`🗾 地震マップ生成成功（${isMapSVG ? 'SVG' : 'PNG'}画像として設定）`)
                     } else {
                         console.log('⚠️ 地震マップ生成失敗: 画像パスがnull')
                     }

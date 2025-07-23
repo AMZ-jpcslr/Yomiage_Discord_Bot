@@ -95,7 +95,7 @@ export const P2P_CODES = {
 } as const
 
 // 震度コードから震度文字列への変換
-function scaleCodeToString(scale: number): string {
+export function scaleCodeToString(scale: number): string {
     const scaleMap: { [key: number]: string } = {
         10: '1',
         20: '2', 

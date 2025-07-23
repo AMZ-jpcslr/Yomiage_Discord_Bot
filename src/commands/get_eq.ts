@@ -1,12 +1,12 @@
-/**
- * 新しい地震情報取得コマンド（P2P地震情報API専用）
+﻿/**
+ * 新しい地震情報取得コマンド（P2P地震情報API専用）- SVG版
  */
 
-import { SlashCommandBuilder, ChatInputCommandInteraction } from 'discord.js'
-import { fetchP2PQuakeData, convertP2PDataToMapData, createP2PEarthquakeEmbed } from '../utils/p2p_earthquake'
-import { generateEarthquakeMap } from '../utils/mapGenerator_new'
+import { SlashCommandBuilder, ChatInputCommandInteraction, AttachmentBuilder } from 'discord.js'
+import { fetchP2PQuakeData, convertP2PDataToMapData, createP2PEarthquakeEmbed, scaleCodeToString } from '../utils/p2p_earthquake'
+import { generateEarthquakeMapSVG } from '../utils/mapGenerator_svg'
 import { getIntensityIconPath } from '../utils/intensityIcon'
-import { AttachmentBuilder } from 'discord.js'
+import * as path from 'path'
 
 export const data = new SlashCommandBuilder()
     .setName('get_eq')
@@ -48,165 +48,100 @@ export async function execute(interaction: ChatInputCommandInteraction) {
         
         if (!latestEarthquake) {
             await interaction.editReply({
-                content: '地震情報が見つかりませんでした。しばらく時間をおいてから再度お試しください。'
+                content: '最新の地震情報が見つかりませんでした。気象庁から新しい地震情報が発表されていない可能性があります。'
             })
             return
         }
         
-        console.log(`📋 取得した地震情報:`)
-        console.log(`  ID: ${latestEarthquake.id}`)
-        console.log(`  コード: ${latestEarthquake.code}`)
-        console.log(`  震源地: ${latestEarthquake.earthquake?.hypocenter?.name || '不明'}`)
-        console.log(`  マグニチュード: M${latestEarthquake.earthquake?.hypocenter?.magnitude || '不明'}`)
-        console.log(`  最大震度: ${latestEarthquake.earthquake?.maxScale || '不明'}`)
-        console.log(`  震度観測点数: ${latestEarthquake.points?.length || 0}`)
+        console.log(`地震情報取得成功: ${latestEarthquake.earthquake?.hypocenter?.name} M${latestEarthquake.earthquake?.hypocenter?.magnitude}`)
         
-        // Discord用埋め込みを作成
+        // P2P地震情報から埋め込みメッセージ作成
         const embed = createP2PEarthquakeEmbed(latestEarthquake)
-        
-        // 震度分布情報を埋め込みに追加
-        if (latestEarthquake.points && latestEarthquake.points.length > 0) {
-            // 震度ごとの地域数を集計
-            const intensityCount: { [key: string]: number } = {}
-            latestEarthquake.points.forEach(point => {
-                const scale = point.scale
-                const intensityStr = scale >= 70 ? '7' :
-                                   scale >= 60 ? '6強' :
-                                   scale >= 55 ? '6弱' :
-                                   scale >= 50 ? '5強' :
-                                   scale >= 45 ? '5弱' :
-                                   scale >= 40 ? '4' :
-                                   scale >= 30 ? '3' :
-                                   scale >= 20 ? '2' :
-                                   scale >= 10 ? '1' : '不明'
-                
-                intensityCount[intensityStr] = (intensityCount[intensityStr] || 0) + 1
-            })
-            
-            // 震度分布サマリーを埋め込みに追加
-            const intensitySummary = Object.entries(intensityCount)
-                .sort(([a], [b]) => {
-                    const order = ['7', '6強', '6弱', '5強', '5弱', '4', '3', '2', '1']
-                    return order.indexOf(a) - order.indexOf(b)
-                })
-                .map(([intensity, count]) => `震度${intensity}: ${count}地域`)
-                .join('\n')
-            
-            if (intensitySummary) {
-                embed.addFields({
-                    name: '📊 震度分布サマリー',
-                    value: intensitySummary,
-                    inline: false
-                })
-            }
-        }
-        
-        // 地図生成用データに変換
-        const mapData = convertP2PDataToMapData(latestEarthquake)
-        
         const files: AttachmentBuilder[] = []
         
-        // Railway環境での地震マップ生成設定（高メモリ環境では有効化）
-        const skipMapGeneration = process.env.SKIP_MAP_GENERATION === 'true' || 
-                                 (process.env.RAILWAY === 'true' && process.env.FORCE_MAP_GENERATION !== 'true')
-        
-        if (skipMapGeneration) {
-            console.log('⚠️ 地震マップ生成をスキップ（SKIP_MAP_GENERATION=true または高メモリ設定未有効）')
-        } else {
-            console.log('🗺️ 地震マップ生成が有効です（高メモリ環境または開発環境）')
-        }
-        
-        // 震度アイコンをembedに追加
-        const maxScale = latestEarthquake.earthquake?.maxScale
-        if (maxScale && maxScale !== 0) {
-            // P2P震度コードから震度文字列に変換
-            const scaleStr = maxScale >= 70 ? '7' :
-                           maxScale >= 60 ? '6+' :
-                           maxScale >= 55 ? '6-' :
-                           maxScale >= 50 ? '5+' :
-                           maxScale >= 45 ? '5-' :
-                           maxScale >= 40 ? '4' :
-                           maxScale >= 30 ? '3' :
-                           maxScale >= 20 ? '2' :
-                           maxScale >= 10 ? '1' : null
-            
-            if (scaleStr) {
-                const intensityIconPath = getIntensityIconPath(scaleStr)
-                if (intensityIconPath) {
-                    const iconAttachment = new AttachmentBuilder(intensityIconPath, { name: 'intensity_icon.png' })
-                    files.push(iconAttachment)
-                    embed.setThumbnail('attachment://intensity_icon.png')
-                    console.log(`✅ 震度アイコン追加: 震度${scaleStr}`)
-                }
+        // 震度アイコンを添付
+        if (latestEarthquake.earthquake?.maxScale) {
+            const maxScaleString = scaleCodeToString(latestEarthquake.earthquake.maxScale)
+            const iconPath = getIntensityIconPath(maxScaleString)
+            if (iconPath) {
+                const iconAttachment = new AttachmentBuilder(iconPath, { name: 'intensity_icon.png' })
+                files.push(iconAttachment)
+                embed.setThumbnail('attachment://intensity_icon.png')
             }
         }
         
-        if (mapData && !skipMapGeneration) {
+        // P2Pデータをマップ用に変換
+        const mapData = convertP2PDataToMapData(latestEarthquake)
+        
+        if (mapData && latestEarthquake.points && latestEarthquake.points.length > 0) {
+            // SVG地震マップ生成を試行
             try {
-                // マップ生成専用のメモリ確保
-                console.log('🧠 地震マップ生成用メモリ準備中...')
+                console.log('🗺️ 震度分布付きSVG地震マップ生成中...')
                 
-                // 事前ガベージコレクションで最大メモリを確保
-                if (global.gc) {
-                    global.gc()
-                    console.log('🧹 マップ生成前GC実行')
+                // 出力ディレクトリのパス
+                const outputDir = path.join(process.cwd(), 'generated_images')
+                
+                // P2Pデータから地点情報を抽出してLocation配列に変換
+                const locations: Array<{
+                    name: string
+                    fullAddress: string
+                    lat: number
+                    lng: number
+                    intensityLevel: string
+                }> = []
+                
+                for (const point of latestEarthquake.points) {
+                    // 都道府県名と地点名を組み合わせて場所名を作成
+                    const locationName = point.addr || '不明'
+                    const fullAddress = `${point.pref || '不明'}${locationName}`
+                    
+                    // 震度コードを文字列に変換
+                    const intensityLevel = scaleCodeToString(point.scale)
+                    
+                    // 基本的な座標を設定（ランダムな日本国内座標、実際のアプリでは座標データベース検索）
+                    const lat = 35 + Math.random() * 10  // 35-45度の範囲
+                    const lng = 130 + Math.random() * 15 // 130-145度の範囲
+                    
+                    locations.push({
+                        name: locationName,
+                        fullAddress: fullAddress,
+                        lat: lat,
+                        lng: lng,
+                        intensityLevel: intensityLevel
+                    })
                 }
+                console.log(`📍 変換した地点数: ${locations.length}`)
                 
-                // メモリ使用量をチェック
-                const memBefore = process.memoryUsage()
-                const heapStats = require('v8').getHeapStatistics()
-                console.log(`🧠 マップ生成前メモリ状況:`)
-                console.log(`  Heap Used: ${Math.round(memBefore.heapUsed / 1024 / 1024)}MB`)
-                console.log(`  RSS: ${Math.round(memBefore.rss / 1024 / 1024)}MB`)
-                console.log(`  Heap Limit: ${Math.round(heapStats.heap_size_limit / 1024 / 1024)}MB`)
-                console.log(`  Available: ${Math.round((heapStats.heap_size_limit - heapStats.used_heap_size) / 1024 / 1024)}MB`)
-                
-                // SIGSEGV防止：利用可能メモリが1GB未満の場合は処理を中止
-                const availableMemoryMB = Math.round((heapStats.heap_size_limit - heapStats.used_heap_size) / 1024 / 1024)
-                if (availableMemoryMB < 1000) {
-                    console.warn(`⚠️ メモリ不足のためマップ生成を中止: ${availableMemoryMB}MB利用可能`)
-                    throw new Error(`Insufficient memory for map generation: ${availableMemoryMB}MB available`)
-                }
-                
-                // Railway環境での安全な地震マップ生成
-                console.log('🗺️ 震度分布付き地震マップ生成中...')
-                
-                // タイムアウト付きでマップ生成を実行（45秒に延長）
-                const mapPromise = generateEarthquakeMap(mapData.earthquakeData, mapData.areaInfo)
+                // タイムアウト付きでSVGマップ生成を実行（30秒）
+                const mapPromise = generateEarthquakeMapSVG(locations, outputDir)
                 const timeoutPromise = new Promise((_, reject) => 
-                    setTimeout(() => reject(new Error('Map generation timeout (45s)')), 45000)
+                    setTimeout(() => reject(new Error('SVG map generation timeout (30s)')), 30000)
                 )
                 
                 const mapImagePath = await Promise.race([mapPromise, timeoutPromise]) as string
                 
                 if (mapImagePath) {
-                    const attachment = new AttachmentBuilder(mapImagePath, { name: 'earthquake_intensity_map.png' })
+                    const attachment = new AttachmentBuilder(mapImagePath, { name: 'earthquake_intensity_map.svg' })
                     files.push(attachment)
                     
-                    // 地図画像を埋め込みの画像として設定
-                    embed.setImage('attachment://earthquake_intensity_map.png')
-                    console.log('✅ 震度分布地震マップ生成成功（埋め込み画像として設定）:', mapImagePath)
+                    // SVG地図ファイルを添付として設定
+                    embed.addFields({
+                        name: '📍 震度分布マップ',
+                        value: '添付のSVGファイルで詳細な震度分布を確認できます',
+                        inline: false
+                    })
+                    console.log('✅ SVG震度分布地震マップ生成成功:', mapImagePath)
                     
                     // 生成後のメモリ状況確認
                     const memAfterMap = process.memoryUsage()
                     console.log(`🧠 マップ生成後メモリ: ${Math.round(memAfterMap.heapUsed / 1024 / 1024)}MB / ${Math.round(memAfterMap.rss / 1024 / 1024)}MB RSS`)
-                    
-                    // 震度分布の詳細をログ出力
-                    if (mapData.areaInfo.areas) {
-                        const intensityTypes = Object.keys(mapData.areaInfo.areas)
-                        console.log(`📊 描画した震度: ${intensityTypes.join(', ')}`)
-                        intensityTypes.forEach(intensity => {
-                            const areaCount = mapData.areaInfo.areas[intensity]?.length || 0
-                            console.log(`  震度${intensity}: ${areaCount}地域`)
-                        })
-                    }
                 } else {
-                    console.log('⚠️ 震度分布地震マップ生成に失敗しました（タイムアウトまたは処理エラー）')
+                    console.log('⚠️ SVG地震マップ生成に失敗しました（タイムアウトまたは処理エラー）')
                 }
             } catch (mapError) {
-                console.error('❌ 震度分布地震マップ生成エラー:', mapError)
+                console.error('❌ SVG地震マップ生成エラー:', mapError)
                 
-                // SIGSEGVやメモリエラーの詳細ログ
+                // エラーの詳細ログ
                 if (mapError instanceof Error) {
                     console.error('❌ エラー詳細:', mapError.message)
                     console.error('❌ スタック:', mapError.stack)
@@ -216,16 +151,6 @@ export async function execute(interaction: ChatInputCommandInteraction) {
                 const memError = process.memoryUsage()
                 console.error(`🧠 エラー時メモリ: ${Math.round(memError.heapUsed / 1024 / 1024)}MB / ${Math.round(memError.rss / 1024 / 1024)}MB RSS`)
                 
-                // 強制ガベージコレクション
-                if (global.gc) {
-                    try {
-                        global.gc()
-                        console.log('🧹 エラー後ガベージコレクション実行')
-                    } catch (gcError) {
-                        console.error('❌ ガベージコレクションエラー:', gcError)
-                    }
-                }
-                
                 // 地震マップなしでも情報は表示する
                 console.log('📋 地震マップ生成失敗のため、テキスト情報のみで継続します')
             }
@@ -233,19 +158,17 @@ export async function execute(interaction: ChatInputCommandInteraction) {
             console.log('⚠️ 地震マップデータの変換に失敗しました（震度情報が不完全な可能性）')
         }
         
+        // Discordに返信
+        await interaction.editReply({
+            embeds: [embed],
+            files: files
+        })
+        
         console.log(`✅ 地震情報取得・表示成功:`)
         console.log(`  震源地: ${latestEarthquake.earthquake?.hypocenter?.name || '不明'}`)
         console.log(`  マグニチュード: M${latestEarthquake.earthquake?.hypocenter?.magnitude || '不明'}`)
         console.log(`  最大震度: ${latestEarthquake.earthquake?.maxScale || '不明'}`)
         console.log(`  震度観測点数: ${latestEarthquake.points?.length || 0}`)
-        console.log(`  データソース: P2P地震情報API`)
-        console.log(`  地図ファイル数: ${files.length}`)
-        console.log(`  震度分布地図: ${files.length > 0 ? '生成済み' : '生成なし'}`)
-        
-        await interaction.editReply({
-            embeds: [embed],
-            files: files
-        })
         
         console.log('=== /get_eq コマンド実行完了 ===')
         

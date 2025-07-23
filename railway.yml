@@ -1,4 +1,4 @@
-# Railway プロジェクト設定
+# Railway プロジェクト設定 - SVG地震マップ対応版
 # このファイルをプロジェクトルートに配置
 
 # ビルド設定 - 軽量Docker最適化
@@ -6,17 +6,18 @@ build:
   builder: DOCKERFILE
   dockerfilePath: Dockerfile.railway
 
-# 環境変数 - SIGSEGV防止のための極限保守的メモリ設定
+# 環境変数 - SVG地震マップ対応の軽量設定
 environment:
   NODE_ENV: production
   RAILWAY: true
   SKIP_MAP_GENERATION: false
   FORCE_MAP_GENERATION: true
-  NODE_OPTIONS: "--max-old-space-size=2048 --max-semi-space-size=32"
+  # SVG出力なのでメモリ制限を緩和
+  NODE_OPTIONS: "--max-old-space-size=4096 --max-semi-space-size=64"
   # VoiceVox Web API設定
   # VOICEVOX_API_KEY: "your-api-key-here"  # デプロイ時に設定
 
-# リソース設定 - 最大メモリ活用
+# リソース設定 - SVG生成に最適化
 resources:
   memory: 8192
   cpu: 2000
