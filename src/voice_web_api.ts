@@ -465,6 +465,71 @@ export function checkApiKeyStatus(): string {
 }
 
 /**
+ * メンションやDiscord記法をユーザー名に変換
+ */
+function replaceMentions(content: string, guild: any): string {
+    // ユーザーメンション <@!ユーザーID> または <@ユーザーID> を置換
+    let processedContent = content.replace(/<@!?(\d+)>/g, (match, userId) => {
+        try {
+            const member = guild.members.cache.get(userId)
+            if (member) {
+                const displayName = member.displayName || member.user.displayName || member.user.username
+                return `@${displayName}さん`
+            }
+        } catch (error) {
+            console.warn(`⚠️ ユーザーID ${userId} の情報取得に失敗:`, error)
+        }
+        return '@ユーザー'
+    })
+    
+    // ロールメンション <@&ロールID> を置換
+    processedContent = processedContent.replace(/<@&(\d+)>/g, (match, roleId) => {
+        try {
+            const role = guild.roles.cache.get(roleId)
+            if (role) {
+                return `@${role.name}`
+            }
+        } catch (error) {
+            console.warn(`⚠️ ロールID ${roleId} の情報取得に失敗:`, error)
+        }
+        return '@ロール'
+    })
+    
+    // チャンネルメンション <#チャンネルID> を置換
+    processedContent = processedContent.replace(/<#(\d+)>/g, (match, channelId) => {
+        try {
+            const channel = guild.channels.cache.get(channelId)
+            if (channel) {
+                return `#${channel.name}`
+            }
+        } catch (error) {
+            console.warn(`⚠️ チャンネルID ${channelId} の情報取得に失敗:`, error)
+        }
+        return '#チャンネル'
+    })
+    
+    // カスタム絵文字 <:絵文字名:ID> または <a:絵文字名:ID> を置換
+    processedContent = processedContent.replace(/<a?:([^:]+):\d+>/g, (match, emojiName) => {
+        return `${emojiName}の絵文字`
+    })
+    
+    // URL表記を簡略化
+    processedContent = processedContent.replace(/https?:\/\/[^\s]+/g, 'URL')
+    
+    // その他のDiscord記法をクリーンアップ
+    processedContent = processedContent
+        .replace(/\*\*(.*?)\*\*/g, '$1')  // 太字
+        .replace(/\*(.*?)\*/g, '$1')      // 斜体
+        .replace(/__(.*?)__/g, '$1')      // 下線
+        .replace(/~~(.*?)~~/g, '$1')      // 取り消し線
+        .replace(/`([^`]+)`/g, '$1')      // インラインコード
+        .replace(/```[\s\S]*?```/g, 'コードブロック')  // コードブロック
+        .replace(/> (.+)/g, '引用、$1')   // 引用
+    
+    return processedContent
+}
+
+/**
  * メッセージ監視を開始（Web API版）
  */
 export function startMessageMonitoring(client: any): void {
@@ -493,9 +558,14 @@ export function startMessageMonitoring(client: any): void {
         // コマンドは無視
         if (message.content.startsWith('/') || message.content.startsWith('!')) return
         
-        // ユーザー名 + メッセージ内容を音声で読み上げ
+        // メンションやDiscord記法をユーザー名に変換
+        const processedContent = replaceMentions(message.content, message.guild)
+        
+        // ユーザー名 + 変換済みメッセージ内容を音声で読み上げ
         const userDisplayName = message.member?.displayName || message.author.displayName || message.author.username || 'ユーザー'
-        const textToSpeak = `${userDisplayName}さん、${message.content}`
+        const textToSpeak = `${userDisplayName}さん、${processedContent}`
+        
+        console.log(`🎤 音声読み上げ: ${textToSpeak}`)
         await speakTextWeb(textToSpeak, message.guild.id)
     })
 }
