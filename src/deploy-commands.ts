@@ -4,6 +4,7 @@ import { data as pingData } from './commands/ping'
 import { data as lotteryData } from './commands/lottery'
 import { data as shiftData } from './commands/shift'
 import { data as voiceWebData } from './commands/voice_web'
+import { data as cleanupData } from './commands/cleanup'
 
 dotenv.config()
 
@@ -12,6 +13,7 @@ const commands = [
     lotteryData.toJSON(),
     shiftData.toJSON(),
     voiceWebData.toJSON(),
+    cleanupData.toJSON(),
 ]
 
 const rest = new REST({ version: '10' }).setToken(process.env.TOKEN as string)
