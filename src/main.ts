@@ -8,6 +8,7 @@ import * as lotteryCommand from './commands/lottery'
 import * as shiftCommand from './commands/shift'
 import * as voiceWebCommand from './commands/voice_web'  // VoiceVox Web API読み上げ
 import * as cleanupCommand from './commands/cleanup'    // BOTメッセージ削除
+import * as listChannelsCommand from './commands/list_channels'
 import dotenv from 'dotenv'
 import { startMessageMonitoring as startWebMessageMonitoring } from './voice_web_api'  // Web API音声読み上げ
 import * as http from 'http'
@@ -119,6 +120,9 @@ client.on('interactionCreate', async interaction => {
                 break
             case 'cleanup':
                 await cleanupCommand.execute(interaction)
+                break
+            case 'list_channels':
+                await listChannelsCommand.execute(interaction)
                 break
             default:
                 await interaction.reply({ content: 'コマンドが見つかりません。', ephemeral: true })
