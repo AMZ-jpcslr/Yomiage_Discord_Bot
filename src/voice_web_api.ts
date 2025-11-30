@@ -71,7 +71,7 @@ const messageQueues = new Map<string, string[]>()
 /**
  * スピーカー情報を取得
  */
-async function getSpeakers(): Promise<any[]> {
+async function getSpeakers(): Promise<unknown[]> {
     try {
         // APIキーが設定されていない場合はスキップ
         if (!VOICEVOX_API_KEY) {
@@ -96,7 +96,7 @@ async function getSpeakers(): Promise<any[]> {
             return []
         }
 
-        const speakers = await response.json()
+        const speakers: unknown[] = await response.json()
         console.log('✅ VoiceVox Web API スピーカー情報取得完了')
         return speakers
     } catch (error) {
@@ -469,7 +469,7 @@ export function checkApiKeyStatus(): string {
 /**
  * メンションやDiscord記法をユーザー名に変換
  */
-function replaceMentions(content: string, guild: any): string {
+function replaceMentions(content: string, guild: Guild): string {
     // ユーザーメンション <@!ユーザーID> または <@ユーザーID> を置換
     let processedContent = content.replace(/<@!?(\d+)>/g, (match, userId) => {
         try {
@@ -534,10 +534,10 @@ function replaceMentions(content: string, guild: any): string {
 /**
  * メッセージ監視を開始（Web API版）
  */
-export function startMessageMonitoring(client: any): void {
+export function startMessageMonitoring(client: import('discord.js').Client): void {
     console.log('🎤 VoiceVox Web API メッセージ監視開始')
     
-    client.on('messageCreate', async (message: any) => {
+    client.on('messageCreate', async (message: import('discord.js').Message) => {
         // ボット自身のメッセージは無視
         if (message.author.bot) return
         
@@ -564,7 +564,7 @@ export function startMessageMonitoring(client: any): void {
         const processedContent = replaceMentions(message.content, message.guild)
         
         // ユーザー名 + 変換済みメッセージ内容を音声で読み上げ
-        const userDisplayName = message.member?.displayName || message.author.displayName || message.author.username || 'ユーザー'
+        const userDisplayName = message.member?.displayName || (message.author as import('discord.js').User).username || 'ユーザー'
         const textToSpeak = `${userDisplayName}さん、${processedContent}`
         
         console.log(`🎤 音声読み上げ: ${textToSpeak}`)

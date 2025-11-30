@@ -2,7 +2,7 @@
  * VoiceVox Web API音声読み上げコマンド
  */
 
-import { SlashCommandBuilder, ChatInputCommandInteraction } from 'discord.js'
+import { SlashCommandBuilder, ChatInputCommandInteraction, TextChannel } from 'discord.js'
 import { 
     joinVoiceChannelWeb, 
     leaveVoiceChannelWeb, 
@@ -140,7 +140,7 @@ async function handleJoin(interaction: ChatInputCommandInteraction) {
 
     console.log(`🎤 VoiceVox Web API接続試行: ${voiceChannel.name} (Guild: ${interaction.guildId})`)
 
-    const success = await joinVoiceChannelWeb(voiceChannel, textChannel as any)
+    const success = await joinVoiceChannelWeb(voiceChannel, textChannel as TextChannel)
     
     if (success) {
         const statusMessage = checkApiKeyStatus()
@@ -191,7 +191,12 @@ async function handleSettings(interaction: ChatInputCommandInteraction) {
     const intonation = interaction.options.getNumber('intonation')
 
     // 設定を更新
-    const newSettings: any = {}
+    const newSettings: {
+        speakerId?: number
+        speed?: number
+        pitch?: number
+        intonationScale?: number
+    } = {}
     
     if (speaker !== null) {
         newSettings.speakerId = parseInt(speaker)
