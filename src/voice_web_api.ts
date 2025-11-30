@@ -328,8 +328,10 @@ export async function joinVoiceChannelWeb(voiceChannel: VoiceBasedChannel, textC
             processNextMessage(guildId)
         })
 
-        player.on('error', (error) => {
-            console.error('❌ 音声再生エラー:', error)
+        player.on('error', (error: unknown) => {
+            // 型が不明な場合があるので安全に処理
+            const err = error instanceof Error ? error : new Error(String(error))
+            console.error('❌ 音声再生エラー:', err.message, err)
             processNextMessage(guildId)
         })
 
