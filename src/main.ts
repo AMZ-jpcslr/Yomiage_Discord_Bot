@@ -9,16 +9,16 @@ import * as shiftCommand from './commands/shift'
 import * as voiceWebCommand from './commands/voice_web'  // VoiceVox Web API読み上げ
 import * as cleanupCommand from './commands/cleanup'    // BOTメッセージ削除
 import * as listChannelsCommand from './commands/list_channels'
-import dotenv from 'dotenv'
+import { loadEnv } from './utils/loadEnv'
 import { startMessageMonitoring as startWebMessageMonitoring } from './voice_web_api'  // Web API音声読み上げ
 import * as http from 'http'
 
-dotenv.config()
+loadEnv()
 
 // 環境変数とトークンの確認
 console.log('=== Discord Bot起動開始 ===')
 console.log('NODE_ENV:', process.env.NODE_ENV)
-console.log('TOKEN確認:', process.env.DISCORD_TOKEN ? '✅ 設定済み' : '❌ 未設定')
+console.log('TOKEN確認:', (process.env.DISCORD_TOKEN || process.env.TOKEN) ? '✅ 設定済み' : '❌ 未設定')
 console.log('VOICEVOX_API_KEY確認:', process.env.VOICEVOX_API_KEY ? '✅ 設定済み' : '❌ 未設定')
 
 const client = new Client({

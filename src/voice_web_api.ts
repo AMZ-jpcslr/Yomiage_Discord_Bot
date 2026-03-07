@@ -15,10 +15,10 @@ import {
 import { VoiceBasedChannel, TextChannel, Guild } from 'discord.js'
 import fs from 'fs'
 import path from 'path'
-import dotenv from 'dotenv'
+import { loadEnv } from './utils/loadEnv'
 
-// 環境変数を読み込み
-dotenv.config()
+// ローカル開発時のみ .env を読み込み（Railway等の本番では Platform Variables を使用）
+loadEnv()
 
 // VoiceVox Web API設定
 const VOICEVOX_WEB_API_URL = 'https://deprecatedapis.tts.quest/v2/voicevox/audio/'
