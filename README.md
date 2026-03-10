@@ -1,4 +1,4 @@
-# OWN Discord Bot
+# Yomiage Discord Bot
 
 Discord のスラッシュコマンドと、VoiceVox Web API を使った読み上げ機能を提供する Bot です。
 
