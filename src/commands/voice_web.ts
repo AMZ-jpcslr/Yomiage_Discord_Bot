@@ -6,6 +6,7 @@ import { SlashCommandBuilder, ChatInputCommandInteraction, TextChannel } from 'd
 import { 
     joinVoiceChannelWeb, 
     leaveVoiceChannelWeb, 
+    speakTextWeb,
     updateVoiceSettingsWeb, 
     getSpeakerNameWeb,
     checkApiKeyStatus
@@ -78,6 +79,11 @@ export const data = new SlashCommandBuilder()
             .setName('status')
             .setDescription('APIキーの設定状況とスピーカー情報を確認')
     )
+    .addSubcommand(subcommand =>
+        subcommand
+            .setName('test')
+            .setDescription('読み上げテスト音声を再生')
+    )
 
 export async function execute(interaction: ChatInputCommandInteraction) {
         const subcommand = interaction.options.getSubcommand()
@@ -95,6 +101,9 @@ export async function execute(interaction: ChatInputCommandInteraction) {
                     break
                 case 'status':
                     await handleStatus(interaction)
+                    break
+                case 'test':
+                    await handleTest(interaction)
                     break
                 default:
                     await interaction.reply({
@@ -262,4 +271,20 @@ async function handleStatus(interaction: ChatInputCommandInteraction) {
         `📝 APIキーの取得: https://su-shiki.com/api/`
 
     await interaction.editReply(response)
+}
+
+/**
+ * test サブコマンド処理
+ */
+async function handleTest(interaction: ChatInputCommandInteraction) {
+    await interaction.deferReply({ ephemeral: true })
+
+    const guildId = interaction.guildId
+    if (!guildId) {
+        await interaction.editReply('❌ サーバー情報を取得できませんでした。')
+        return
+    }
+
+    await speakTextWeb('読み上げテストです。音声が聞こえれば、音声再生経路は正常です。', guildId)
+    await interaction.editReply('✅ 読み上げテスト音声をキューに追加しました。')
 }

@@ -9,6 +9,8 @@ import {
     createAudioResource, 
     AudioPlayerStatus, 
     VoiceConnectionStatus,
+    NoSubscriberBehavior,
+    entersState,
     AudioPlayer,
     VoiceConnection 
 } from '@discordjs/voice'
@@ -302,6 +304,16 @@ export async function joinVoiceChannelWeb(voiceChannel: VoiceBasedChannel, textC
             channelId: voiceChannel.id,
             guildId: guildId,
             adapterCreator: voiceChannel.guild.voiceAdapterCreator,
+            selfDeaf: false,
+            selfMute: false,
+        })
+
+        connection.on('stateChange', (oldState, newState) => {
+            console.log(`[voice] connection state: ${oldState.status} -> ${newState.status}`)
+        })
+
+        connection.on('error', (error) => {
+            console.error('[voice] connection error:', error)
         })
 
         // 接続状態の監視
@@ -315,8 +327,16 @@ export async function joinVoiceChannelWeb(voiceChannel: VoiceBasedChannel, textC
         })
 
         // オーディオプレイヤーを作成
-        const player = createAudioPlayer()
+        const player = createAudioPlayer({
+            behaviors: {
+                noSubscriber: NoSubscriberBehavior.Play,
+            },
+        })
         connection.subscribe(player)
+
+        player.on('stateChange', (oldState, newState) => {
+            console.log(`[voice] player state: ${oldState.status} -> ${newState.status}`)
+        })
 
         // プレイヤーの状態監視
         player.on(AudioPlayerStatus.Playing, () => {
@@ -339,6 +359,12 @@ export async function joinVoiceChannelWeb(voiceChannel: VoiceBasedChannel, textC
         activeConnections.set(guildId, connection)
         audioPlayers.set(guildId, player)
         messageQueues.set(guildId, [])
+
+        try {
+            await entersState(connection, VoiceConnectionStatus.Ready, 15000)
+        } catch (error) {
+            console.warn('[voice] connection did not become ready within 15s:', error)
+        }
 
         await textChannel.send(`🎤 **VoiceVox Web API読み上げ機能が有効になりました！**\n📝 このチャンネルでメッセージを送信すると読み上げられます。`)
         
@@ -376,6 +402,8 @@ export async function speakTextWeb(text: string, guildId: string): Promise<void>
             if (player && player.state.status === AudioPlayerStatus.Idle) {
                 processNextMessage(guildId)
             }
+        } else {
+            console.warn(`[voice] no active queue for guild ${guildId}; run /voice_web join first`)
         }
     } catch (error) {
         console.error('❌ 音声読み上げエラー:', error)
@@ -406,7 +434,9 @@ async function processNextMessage(guildId: string): Promise<void> {
         }
 
         const resource = createAudioResource(audioPath)
+        console.log(`[voice] audio resource created: ${audioPath}`)
         player.play(resource)
+        console.log('[voice] player.play called')
 
         // ファイル再生後に削除
         setTimeout(() => {
@@ -552,10 +582,16 @@ export function startMessageMonitoring(client: import('discord.js').Client): voi
         if (!guildConfig) return
         
         // 指定されたテキストチャンネル以外は無視
-        if (message.channel.id !== guildConfig.textChannelId) return
+        if (message.channel.id !== guildConfig.textChannelId) {
+            console.log(`[voice] ignored message in channel ${message.channel.id}; listening on ${guildConfig.textChannelId}`)
+            return
+        }
         
         // 空メッセージは無視
-        if (!message.content || message.content.trim().length === 0) return
+        if (!message.content || message.content.trim().length === 0) {
+            console.log('[voice] ignored empty message content; check MESSAGE CONTENT INTENT if normal text is not read')
+            return
+        }
         
         // コマンドは無視
         if (message.content.startsWith('/') || message.content.startsWith('!')) return
