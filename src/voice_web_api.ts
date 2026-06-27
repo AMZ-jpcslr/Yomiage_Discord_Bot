@@ -364,6 +364,13 @@ export async function joinVoiceChannelWeb(voiceChannel: VoiceBasedChannel, textC
             await entersState(connection, VoiceConnectionStatus.Ready, 15000)
         } catch (error) {
             console.warn('[voice] connection did not become ready within 15s:', error)
+            await textChannel.send(
+                '❌ ボイス接続が音声送信可能な状態になりませんでした。\n' +
+                'Railway などの実行環境で Discord Voice に必要な UDP 通信が通っていない可能性があります。'
+            )
+            cleanup(guildId)
+            connection.destroy()
+            return false
         }
 
         await textChannel.send(`🎤 **VoiceVox Web API読み上げ機能が有効になりました！**\n📝 このチャンネルでメッセージを送信すると読み上げられます。`)
