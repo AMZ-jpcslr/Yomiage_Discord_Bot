@@ -1,3 +1,4 @@
+import { data as translateData } from './commands/translate'
 import { REST, Routes } from 'discord.js'
 import { loadEnv } from './utils/loadEnv'
 import { data as pingData } from './commands/ping'
@@ -10,6 +11,7 @@ import { data as listChannelsData } from './commands/list_channels'
 loadEnv()
 
 const commands = [
+    translateData.toJSON(),
     pingData.toJSON(),
     lotteryData.toJSON(),
     shiftData.toJSON(),
@@ -51,6 +53,7 @@ async function main() {
         }
     } catch (error) {
         console.error(error)
+        process.exitCode = 1
     }
 }
 

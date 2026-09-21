@@ -1,176 +1,97 @@
 # Yomiage Discord Bot
 
-Discord のスラッシュコマンドと、VoiceVox Web API を使った読み上げ機能を提供する Bot です。
+指定したテキストチャンネルの投稿をVOICEVOXで音声化し、Botが参加したボイスチャンネルで読み上げます。指定ユーザー宛てのメンション・返信をDeepLで自動翻訳する機能もあります。翻訳はボイスチャンネルに接続していなくても動作します。
 
-> Railway でデプロイする場合は、`.env` に Token を直書きせず **Railway の Variables（Key）** を使って設定します。
+## セットアップ
 
-## 主な機能
+Node.js **22.12以上**、読み上げには **FFmpeg** が必要です。Dockerイメージには同梱しています。
 
-- スラッシュコマンド
-  - `/ping` : Bot の Ping を表示
-  - `/lottery` : 抽選（カンマ区切りの候補から 1 つ選ぶ）
-  - `/shift` : シフト管理（追加・表示・編集・削除・詳細表示）
-  - `/voice_web` : VoiceVox Web API 読み上げ（join/leave/settings/status）
-  - `/cleanup` : Bot が送信したメッセージを一括削除（要権限）
-  - `/list_channels` : サーバー内のチャンネル一覧と最終メッセージ時刻を出力（権限の範囲内）
-- ヘルスチェック HTTP サーバー
-  - `/health` : JSON で稼働状況を返す
-  - `/` : プレーンテキストで稼働中メッセージ
-
-## 動作要件
-
-- Node.js 18 以上（Dockerfile も Node 18 を使用）
-- Discord Bot（Discord Developer Portal で作成）
-- VoiceVox Web API を使う場合：`VOICEVOX_API_KEY`
-
-### Discord 側の設定（重要）
-
-本 Bot は以下の Intent を利用します。
-
-- `MESSAGE CONTENT INTENT`（メッセージ読み上げ等で必要）
-- `GUILD VOICE STATES INTENT`（ボイス関連で必要）
-
-Discord Developer Portal → Applications → Bot の設定画面で有効化してください。
-
-## 環境変数
-
-この Bot は **実行環境の環境変数（`process.env`）** から設定を読み込みます。
-
-### 必須
-
-- `DISCORD_TOKEN` : Discord Bot Token
-  - 互換キー：`TOKEN`（どちらでも動作しますが、`DISCORD_TOKEN` 推奨）
-
-### 任意（機能に応じて）
-
-- `VOICEVOX_API_KEY` : VoiceVox Web API キー
-- `PORT` : ヘルスチェックサーバーのポート（未設定の場合 3000）
-- `NODE_ENV` : 実行モード（例：`development` / `production`）
-
-### スラッシュコマンド登録用（`deploy-commands` を使う場合）
-
-- `CLIENT_ID` : Discord Application ID（= Client ID）
-  - 互換キー：`DISCORD_CLIENT_ID`
-- `GUILD_ID` : ギルド（サーバー）単位でコマンド登録したい場合のみ指定
-
-> `CLIENT_ID` は秘密情報ではありません。Discord Developer Portal → Applications → General Information の `APPLICATION ID` が該当します。
-
-## ローカルセットアップ
-
-1) 依存関係をインストール
-
-```bash
+```sh
 npm ci
 ```
 
-2) `.env` を用意（ローカル用）
+`.env.example` を `.env` にコピーして環境変数を設定します。RailwayではVariablesへ設定してください。
 
-`.env.example` をコピーして `.env` を作成し、必要な値を入れてください。
+| 変数 | 用途 |
+| --- | --- |
+| `DISCORD_TOKEN` | 必須。Botトークン。互換名 `TOKEN` |
+| `CLIENT_ID` | コマンド登録時に必要なApplication ID。互換名 `DISCORD_CLIENT_ID` |
+| `GUILD_ID` | 任意。指定するとそのサーバーにコマンド登録。未指定はグローバル登録 |
+| `DEEPL_API_KEY` | 自動翻訳に必要。DeepL API Free / Proのキー。末尾`:fx`でFreeを判別 |
+| `VOICEVOX_ENGINE_URL` | VOICEVOX Engineの接続先。例 `http://voicevox.railway.internal:50021`。指定時はこちらを優先 |
+| `VOICEVOX_API_KEY` | 既存の外部Web API方式を利用する場合のキー |
+| `DATA_DIR` | 設定の保存先。ローカル既定`config`、Docker既定`/data` |
+| `PORT` | ヘルスチェック用ポート。Railwayから注入。ローカル既定3000 |
 
-```bash
-# macOS/Linux
-cp .env.example .env
-
-# Windows(PowerShell)
-Copy-Item .env.example .env
-```
-
-3) ビルド
-
-```bash
+```sh
 npm run build
-```
-
-4) 起動
-
-```bash
+npm run deploy-commands
 npm start
 ```
 
-開発中に TypeScript を直接実行したい場合は以下も使えます。
+開発起動は `npm run dev`、外部APIやBotへ接続しない自動テストは `npm test`。
+コマンド追加後は再度 `npm run deploy-commands` を実行してください。登録失敗時は終了コード1を返します。
 
-```bash
-npm run test
+## Discordの設定
+
+Developer PortalのBot設定で **MESSAGE CONTENT INTENT** を有効化します。`GuildVoiceStates` はコードで指定済みの通常Intentで、Portalの特権Intent設定は不要です。
+
+Botを `bot` / `applications.commands` スコープでサーバーに招待し、利用チャンネルで次の権限を付与してください。
+
+- テキスト: チャンネルを見る、メッセージを送信、メッセージ履歴を読む
+- ボイス: チャンネルを見る、接続、発言
+
+## 読み上げ
+
+1. 自分が読み上げ先のボイスチャンネルに参加します。
+2. 監視したいテキストチャンネルで `/voice_web join` を実行します。
+3. そのチャンネルへの投稿を投稿順に読み上げます。
+4. `/voice_web leave` で停止します。
+
+`/voice_web settings` で声・速度・音程などを変更できます。`status` で接続設定、`test` でテスト再生ができます。サーバーごとに同時に1つのボイス接続と1つの監視チャンネルを使用します。Botの投稿は読み上げません。1件500文字、待機100件までで、それ以上の文字は省略、満杯時の新規投稿はスキップします。
+
+VOICEVOX Engine方式は `/audio_query` と `/synthesis` を利用します。Engineは別サービスとして起動し、BotからアクセスできるURLを設定してください。既存のWeb API方式は `deprecatedapis.tts.quest` を利用する互換機能として残していますが、その外部サービスの稼働は未検証です。
+
+再起動で音声接続は切れるため `/voice_web join` を再実行してください。音声設定は保存されます。通常のボイスチャンネルを対象にしており、ステージでの発言許可の自動取得は行いません。
+
+## 自動翻訳
+
+設定には **サーバー管理** 権限が必要です。国籍は推測せず、ユーザーが読む言語を明示して登録します。
+
+```text
+/translate set channel:#交流 user:@Alice language:英語（米国）
+/translate list channel:#交流
+/translate remove channel:#交流 user:@Alice
 ```
 
-## スラッシュコマンドの登録
+登録後、`#交流` で `@Alice 明日は何時に集まりますか？` と投稿するか、Aliceの投稿に返信すると、英訳を元メッセージへの返信として同じチャンネルに投稿します。返信時にユーザー通知をOFFにしていても対象になります。
 
-Bot にスラッシュコマンドを表示させるには「登録」が必要です。
+- 対象は直接のユーザーメンションと返信。ロールメンションや`@everyone`、対象本人の自分宛て投稿、Bot/Webhook、本文のない添付だけの投稿は対象外です。
+- 元言語は自動判定。1チャンネル20ユーザーまで登録可能。同じ言語の宛先が複数あってもAPI呼び出しは1回です。
+- 本人の通常発言の日本語化、過去の投稿・編集済みメッセージの再翻訳、スレッド内の投稿は対象外です。
+- 訳文によるメンション通知は発生させません。長い訳文は分割して送信します。訳文は自動読み上げしません。
+- APIタイムアウトは15秒。失敗は元投稿への返信で通知し、読み上げと後続の翻訳を継続します。全体で処理中・待機100投稿までとし、満杯時の新規投稿はスキップしてログに残します。
+- 設定は`DATA_DIR/translation.json`へ保存します。解除後は未処理の投稿にも解除を反映しますが、処理中の翻訳は完了する場合があります。
 
-1) 環境変数を用意
+**翻訳対象の本文はDeepLへ送信され、訳文はそのチャンネルの閲覧者に公開されます。** API利用量はDeepLの契約に従います。
 
-- `DISCORD_TOKEN`（または `TOKEN`）
-- `CLIENT_ID`（または `DISCORD_CLIENT_ID`）
-- 任意：`GUILD_ID`（テスト用。ギルド登録は反映が速い）
+## Railwayへのデプロイ
 
-2) ビルド
+1. このリポジトリをRailwayの常駐サービスとして接続します。`railway.toml` が `Dockerfile.railway` を指定し、Node.js 22・FFmpegを含むイメージをビルドします。以前のBuild/Start Commandの手動上書きは解除してください。旧YAML/Nixpacks設定は本手順では使用しません。
+2. Variablesに `DISCORD_TOKEN`、`DEEPL_API_KEY`、音声用の `VOICEVOX_ENGINE_URL` または `VOICEVOX_API_KEY` を設定します。
+3. **Volumeを `/data` にマウント**し、`DATA_DIR=/data` とします。Volumeなしでは再デプロイ時に設定が消える可能性があります。ファイル保存のためレプリカは **1** としてください。
+4. `CLIENT_ID` と必要なら `GUILD_ID` を設定し、ローカルまたはRailwayの実行環境で `npm run deploy-commands` を一度実行します。Bot起動時の自動登録はしません。
+5. `/health` がDiscord接続準備完了時200、未接続時503を返します。Railwayのヘルスチェックに設定済みです。
+6. Discordで `/voice_web join`、`/translate set` を実行します。
 
-```bash
-npm run build
-```
+Railway上の実ボイス再生にはDiscord Voiceへの通信が必要です。接続に失敗した場合はBotの接続・発言権限、API接続先、ログ、実行環境のUDP通信を確認してください。トークンやAPIキーをGitへコミットしないでください。
 
-3) 登録実行
+## その他の既存コマンド
 
-```bash
-node build/deploy-commands.js
-```
+`/ping`、`/lottery`、`/shift`、`/cleanup`、`/list_channels` は継続利用できます。
 
-- `GUILD_ID` を設定した場合：ギルドコマンドとして登録（即時反映）
-- 未設定の場合：グローバルコマンドとして登録（反映まで時間がかかる場合があります）
+## 参照
 
-## VoiceVox Web API 読み上げ
-
-- `/voice_web join` を実行したサーバーのボイスチャンネルに参加し、同じテキストチャンネルのメッセージを読み上げます。
-- API キーの状態は `/voice_web status` で確認できます。
-
-## Railway でのデプロイ
-
-### 1) Railway Variables（Key）を設定
-
-Railway のプロジェクト設定で、以下を Variables として登録します。
-
-- `DISCORD_TOKEN`（または `TOKEN`）
-- `VOICEVOX_API_KEY`（読み上げを使う場合）
-- `PORT`（任意）
-
-スラッシュコマンド登録を Railway 上で行う場合は、追加で以下も設定してください。
-
-- `CLIENT_ID`
-- `GUILD_ID`（任意）
-
-> `.env` は Git 管理しないでください（このリポジトリでは `.gitignore` 対象です）。
-
-### 2) ビルド／起動
-
-このリポジトリには Railway 用の設定と Dockerfile が含まれています。
-
-- `Dockerfile.railway` : Railway 向けに依存関係とビルドを最適化
-- `railway.yml` / `railway.toml` : Railway 設定
-
-Railway 側で `npm start` が実行される構成で、`build/main.js` を起動します。
-
-## トラブルシューティング
-
-### Token が見つからない
-
-起動ログで `DISCORD_TOKEN`/`TOKEN` が未設定と出る場合：
-
-- ローカル：`.env` に `DISCORD_TOKEN` を設定しているか確認
-- Railway：Variables（Key）に `DISCORD_TOKEN`（または `TOKEN`）を設定しているか確認
-
-### "disallowed intents" が出る
-
-Discord Developer Portal の Bot 設定で以下を有効化してください。
-
-- `MESSAGE CONTENT INTENT`
-- `GUILD VOICE STATES INTENT`
-
-### コマンドが表示されない
-
-- まず `node build/deploy-commands.js` でコマンド登録を実行してください
-- グローバル登録の場合、反映まで時間がかかることがあります（テストは `GUILD_ID` を設定してギルド登録推奨）
-
-## セキュリティ注意
-
-- Bot Token は漏洩すると乗っ取られます。Git にコミットしないでください。
-- Token を一度でも公開リポジトリ等に入れてしまった場合は、Discord Developer Portal で再発行（ローテーション）してください。
+- [DeepL Translate API](https://developers.deepl.com/api-reference/translate/request-translation)
+- [discord.js Voice](https://discord.js.org/docs/packages/voice/0.19.2)
+- [Railway Config as Code](https://docs.railway.com/config-as-code/reference)

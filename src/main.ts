@@ -3,6 +3,8 @@
  */
 
 import { Client, GatewayIntentBits, ActivityType } from 'discord.js'
+import * as translateCommand from './commands/translate'
+import { startTranslationMonitoring } from './translation'
 import * as pingCommand from './commands/ping'
 import * as lotteryCommand from './commands/lottery'
 import * as shiftCommand from './commands/shift'
@@ -26,7 +28,7 @@ const client = new Client({
         GatewayIntentBits.Guilds,
         GatewayIntentBits.GuildMessages,
         GatewayIntentBits.MessageContent,  // メッセージ内容の取得（特権インテント）
-        GatewayIntentBits.GuildVoiceStates,  // ボイス状態の監視（特権インテント）
+        GatewayIntentBits.GuildVoiceStates,  // ボイス状態の監視（通常インテント）
     ],
 })
 
@@ -106,6 +108,9 @@ client.on('interactionCreate', async interaction => {
 
     try {
         switch (interaction.commandName) {
+            case 'translate':
+                await translateCommand.execute(interaction)
+                break
             case 'ping':
                 await pingCommand.execute(interaction)
                 break
@@ -166,15 +171,20 @@ client.once('ready', async () => {
     }, 10 * 1000)
     
     // プロセス終了時にタイマーをクリア
-    process.on('SIGINT', () => {
+    const shutdown = () => {
         console.log('🛑 ボット終了処理中...')
         clearInterval(statusUpdateInterval)
+        client.destroy()
+        server.close()
         process.exit(0)
-    })
+    }
+    process.once('SIGINT', shutdown)
+    process.once('SIGTERM', shutdown)
 
     // VoiceVox Web API音声読み上げ監視を開始  
     console.log('🌐 VoiceVox Web API音声読み上げ監視開始...')
     startWebMessageMonitoring(client)
+    startTranslationMonitoring(client)
 })
 
 // エラーハンドリング
@@ -197,12 +207,12 @@ const port = process.env.PORT || 3000
 const server = http.createServer((req, res) => {
     if (req.url === '/health') {
         const jstTime = getJSTTime()
-        res.writeHead(200, { 'Content-Type': 'application/json' })
+        res.writeHead(client.isReady() ? 200 : 503, { 'Content-Type': 'application/json' })
         res.end(JSON.stringify({
-            status: 'OK',
+            status: client.isReady() ? 'OK' : 'NOT_READY',
             timestamp: new Date().toISOString(),
             jstTimestamp: jstTime.toLocaleString('ja-JP'),
-            botStatus: client.user ? 'online' : 'offline',
+            botStatus: client.isReady() ? 'online' : 'offline',
             guilds: client.guilds.cache.size,
             uptime: process.uptime(),
             system: 'Discord Bot システム'
@@ -236,7 +246,7 @@ console.log('使用Intents:', [
     'Guilds',
     'GuildMessages', 
     'MessageContent（特権）',
-    'GuildVoiceStates（特権）'
+    'GuildVoiceStates'
 ])
 
 client.login(token).catch(error => {
@@ -248,7 +258,7 @@ client.login(token).catch(error => {
         console.error('2. あなたのBotアプリケーションを選択')
         console.error('3. 「Bot」設定で以下の特権インテントを有効化:')
         console.error('   ☑️ MESSAGE CONTENT INTENT')
-        console.error('   ☑️ GUILD VOICE STATES INTENT (ボイス機能用)')
+        console.error('   GuildVoiceStates はコード内で指定済みです（特権Intentではありません）。')
         console.error('4. 「Save Changes」をクリック')
         console.error('')
     }

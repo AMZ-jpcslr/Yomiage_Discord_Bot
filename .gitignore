@@ -76,3 +76,6 @@ data/voice_channels.json
 
 # VoiceVox service logs
 voicevox-service/logs/
+# Runtime voice and translation settings
+config/
+audio_web/

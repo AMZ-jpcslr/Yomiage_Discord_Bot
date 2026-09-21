@@ -24,7 +24,6 @@ loadEnv()
 
 // VoiceVox Web API設定
 const VOICEVOX_WEB_API_URL = 'https://deprecatedapis.tts.quest/v2/voicevox/audio/'
-const VOICEVOX_SPEAKERS_API_URL = 'https://deprecatedapis.tts.quest/v2/voicevox/speakers/'
 const VOICEVOX_API_KEY = process.env.VOICEVOX_API_KEY || '' // 環境変数から取得
 
 // デバッグログ
@@ -60,7 +59,7 @@ const DEFAULT_VOICE_SETTINGS: VoiceSettings = {
 }
 
 // 設定ファイルパス
-const VOICE_CONFIG_FILE = path.resolve(__dirname, '../config/voice_web_config.json')
+const VOICE_CONFIG_FILE = path.resolve(process.env.DATA_DIR || 'config', 'voice_web_config.json')
 
 // 音声ファイル保存ディレクトリ
 const AUDIO_DIR = path.resolve(__dirname, '../audio_web')
@@ -69,51 +68,28 @@ const AUDIO_DIR = path.resolve(__dirname, '../audio_web')
 const activeConnections = new Map<string, VoiceConnection>()
 const audioPlayers = new Map<string, AudioPlayer>()
 const messageQueues = new Map<string, string[]>()
-
-/**
- * スピーカー情報を取得
- */
-async function getSpeakers(): Promise<unknown[]> {
-    try {
-        // APIキーが設定されていない場合はスキップ
-        if (!VOICEVOX_API_KEY) {
-            console.warn('⚠️ VoiceVox Web API: APIキーが設定されていません')
-            return []
-        }
-
-        const url = `${VOICEVOX_SPEAKERS_API_URL}?key=${VOICEVOX_API_KEY}`
-
-        const response = await fetch(url, {
-            headers: {
-                'User-Agent': 'Discord Bot VoiceVox Integration'
-            }
-        })
-        
-        if (!response.ok) {
-            if (response.status === 403) {
-                console.warn('⚠️ VoiceVox Web API: APIキーが無効または期限切れです')
-            } else {
-                console.warn(`⚠️ VoiceVox Web API スピーカー取得エラー: ${response.status}`)
-            }
-            return []
-        }
-
-        const speakers: unknown[] = await response.json()
-        console.log('✅ VoiceVox Web API スピーカー情報取得完了')
-        return speakers
-    } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : String(error)
-        console.warn('⚠️ スピーカー情報取得エラー（ネットワークまたはタイムアウト）:', errorMessage)
-        return []
-    }
-}
+const processingPlayers = new Set<AudioPlayer>()
 
 /**
  * Web APIで音声合成
  */
 async function synthesizeVoiceWeb(text: string, settings: VoiceSettings): Promise<Buffer | null> {
     try {
-        console.log(`🎤 VoiceVox Web API音声合成開始: "${text}"`)
+        console.log('🎤 VoiceVox 音声合成開始')
+        const engine = process.env.VOICEVOX_ENGINE_URL?.replace(/\/$/, '')
+        if (engine) {
+            const params = new URLSearchParams({ text, speaker: String(settings.speakerId) })
+            const queryResponse = await fetch(`${engine}/audio_query?${params}`, { method: 'POST', signal: AbortSignal.timeout(30000) })
+            if (!queryResponse.ok) throw new Error(`VOICEVOX audio_query HTTP ${queryResponse.status}`)
+            const query = await queryResponse.json() as Record<string, unknown>
+            Object.assign(query, { speedScale: settings.speed, pitchScale: settings.pitch, intonationScale: settings.intonationScale })
+            const response = await fetch(`${engine}/synthesis?speaker=${settings.speakerId}`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(query), signal: AbortSignal.timeout(60000),
+            })
+            if (!response.ok) throw new Error(`VOICEVOX synthesis HTTP ${response.status}`)
+            return Buffer.from(await response.arrayBuffer())
+        }
         console.log(`🎭 設定: Speaker ${settings.speakerId}, Speed ${settings.speed}, Pitch ${settings.pitch}, Intonation ${settings.intonationScale}`)
 
         // APIパラメータを構築
@@ -133,6 +109,7 @@ async function synthesizeVoiceWeb(text: string, settings: VoiceSettings): Promis
         const url = `${VOICEVOX_WEB_API_URL}?${params.toString()}`
         
         const response = await fetch(url, {
+            signal: AbortSignal.timeout(30000),
             method: 'GET',
             headers: {
                 'User-Agent': 'Discord Bot VoiceVox Integration'
@@ -296,6 +273,7 @@ export function setVoiceChannelConfigWeb(guildId: string, voiceChannelId: string
 export async function joinVoiceChannelWeb(voiceChannel: VoiceBasedChannel, textChannel: TextChannel): Promise<boolean> {
     try {
         const guildId = voiceChannel.guild.id
+        leaveVoiceChannelWeb(guildId)
         
         // 設定を保存
         setVoiceChannelConfigWeb(guildId, voiceChannel.id, textChannel.id)
@@ -304,7 +282,7 @@ export async function joinVoiceChannelWeb(voiceChannel: VoiceBasedChannel, textC
             channelId: voiceChannel.id,
             guildId: guildId,
             adapterCreator: voiceChannel.guild.voiceAdapterCreator,
-            selfDeaf: false,
+            selfDeaf: true,
             selfMute: false,
         })
 
@@ -323,7 +301,7 @@ export async function joinVoiceChannelWeb(voiceChannel: VoiceBasedChannel, textC
 
         connection.on(VoiceConnectionStatus.Disconnected, () => {
             console.log(`📤 ボイスチャンネル切断: ${voiceChannel.name}`)
-            cleanup(guildId)
+            if (activeConnections.get(guildId) === connection) leaveVoiceChannelWeb(guildId)
         })
 
         // オーディオプレイヤーを作成
@@ -345,14 +323,12 @@ export async function joinVoiceChannelWeb(voiceChannel: VoiceBasedChannel, textC
 
         player.on(AudioPlayerStatus.Idle, () => {
             console.log('⏸️ 音声再生完了')
-            processNextMessage(guildId)
         })
 
         player.on('error', (error: unknown) => {
             // 型が不明な場合があるので安全に処理
             const err = error instanceof Error ? error : new Error(String(error))
             console.error('❌ 音声再生エラー:', err.message, err)
-            processNextMessage(guildId)
         })
 
         // 管理マップに追加
@@ -379,6 +355,7 @@ export async function joinVoiceChannelWeb(voiceChannel: VoiceBasedChannel, textC
         
     } catch (error) {
         console.error('❌ ボイスチャンネル接続エラー:', error)
+        leaveVoiceChannelWeb(voiceChannel.guild.id)
         return false
     }
 }
@@ -401,7 +378,8 @@ export async function speakTextWeb(text: string, guildId: string): Promise<void>
     try {
         const queue = messageQueues.get(guildId)
         if (queue) {
-            queue.push(text)
+            if (queue.length >= 100) { console.warn('[voice] queue full'); return }
+            queue.push(text.slice(0, 500))
             console.log(`📝 メッセージをキューに追加: "${text}" (キュー長: ${queue.length})`)
             
             // 現在再生中でない場合はすぐに処理
@@ -423,42 +401,29 @@ export async function speakTextWeb(text: string, guildId: string): Promise<void>
 async function processNextMessage(guildId: string): Promise<void> {
     const queue = messageQueues.get(guildId)
     const player = audioPlayers.get(guildId)
-    
-    if (!queue || !player || queue.length === 0) {
-        return
-    }
-
-    const text = queue.shift()!
-    console.log(`🎤 音声読み上げ処理開始: "${text}"`)
-
+    if (!queue || !player || processingPlayers.has(player)) return
+    processingPlayers.add(player)
     try {
-        const audioPath = await createAudioFileWeb(text, guildId)
-        if (!audioPath) {
-            console.error('❌ 音声ファイル作成失敗')
-            // 次のメッセージを処理
-            setTimeout(() => processNextMessage(guildId), 1000)
-            return
-        }
-
-        const resource = createAudioResource(audioPath)
-        console.log(`[voice] audio resource created: ${audioPath}`)
-        player.play(resource)
-        console.log('[voice] player.play called')
-
-        // ファイル再生後に削除
-        setTimeout(() => {
+        while (queue.length && audioPlayers.get(guildId) === player) {
+            let audioPath: string | null = null
             try {
-                fs.unlinkSync(audioPath)
-                console.log(`🗑️ 音声ファイル削除: ${audioPath}`)
-            } catch (e) {
-                console.warn('⚠️ 音声ファイル削除失敗:', e)
+                audioPath = await createAudioFileWeb(queue.shift()!, guildId)
+                if (!audioPath || audioPlayers.get(guildId) !== player) continue
+                player.play(createAudioResource(audioPath))
+                await entersState(player, AudioPlayerStatus.Playing, 15000)
+                await entersState(player, AudioPlayerStatus.Idle, 120000)
+            } catch {
+                player.stop(true)
+                console.error('[voice] 音声の生成・再生に失敗しました')
+            } finally {
+                if (audioPath) {
+                    try { fs.rmSync(audioPath, { force: true }) }
+                    catch { console.warn('[voice] 一時音声ファイルの削除に失敗しました') }
+                }
             }
-        }, 30000) // 30秒後に削除
-
-    } catch (error) {
-        console.error('❌ 音声処理エラー:', error)
-        // エラー時も次のメッセージを処理
-        setTimeout(() => processNextMessage(guildId), 1000)
+        }
+    } finally {
+        processingPlayers.delete(player)
     }
 }
 
@@ -466,6 +431,7 @@ async function processNextMessage(guildId: string): Promise<void> {
  * リソースクリーンアップ
  */
 function cleanup(guildId: string): void {
+    audioPlayers.get(guildId)?.stop(true)
     activeConnections.delete(guildId)
     audioPlayers.delete(guildId)
     messageQueues.delete(guildId)
@@ -497,6 +463,7 @@ export function getSpeakerNameWeb(speakerId: number): string {
  * APIキーの設定状況確認
  */
 export function checkApiKeyStatus(): string {
+    if (process.env.VOICEVOX_ENGINE_URL) return '✅ VOICEVOX Engine 接続先が設定されています。'
     if (!VOICEVOX_API_KEY) {
         return '⚠️ APIキーが設定されていません。環境変数 VOICEVOX_API_KEY を設定してください。'
     }
@@ -612,16 +579,5 @@ export function startMessageMonitoring(client: import('discord.js').Client): voi
         
         console.log(`🎤 音声読み上げ: ${textToSpeak}`)
         await speakTextWeb(textToSpeak, message.guild.id)
-    })
-}
-
-// スピーカー情報を初期化時に取得（エラーハンドリング強化）
-if (process.env.NODE_ENV !== 'deploy') {
-    getSpeakers().then(speakers => {
-        if (speakers.length > 0) {
-            console.log(`✅ VoiceVox Web API利用可能スピーカー: ${speakers.length}個`)
-        }
-    }).catch(error => {
-        console.warn('⚠️ スピーカー情報取得をスキップ（デプロイ時またはAPIエラー）:', error.message)
     })
 }

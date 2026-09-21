@@ -1,32 +1,18 @@
-# Discord Bot for Railway Deployment
-FROM node:18-alpine
-
-# Install ffmpeg for VoiceVox functionality
-RUN apk add --no-cache \
-    ffmpeg \
-    opus \
-    libsodium
-
+FROM node:22-bookworm-slim AS build
 WORKDIR /app
-
-# Copy package files
 COPY package*.json ./
+RUN npm ci
+COPY tsconfig.json ./
+COPY src/ ./src/
+RUN npm run build && npm prune --omit=dev
 
-# Install dependencies
-RUN npm config set fund false && \
-    npm config set audit false && \
-    npm ci --only=production
-
-# Copy all files
-COPY . .
-
-# Build TypeScript
-RUN npm install typescript --no-save && \
-    npx tsc && \
-    npm uninstall typescript
-
-# Set environment variables
+FROM node:22-bookworm-slim
+RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg ca-certificates && rm -rf /var/lib/apt/lists/*
+WORKDIR /app
+COPY --from=build /app/node_modules ./node_modules
+COPY --from=build /app/build ./build
+COPY package.json ./
+COPY data/ ./data/
 ENV NODE_ENV=production
-
-# Start
-CMD ["npm", "start"]
+ENV DATA_DIR=/data
+CMD ["node", "build/main.js"]

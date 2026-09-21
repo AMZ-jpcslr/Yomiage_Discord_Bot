@@ -1,10 +1,9 @@
-# Railway.app configuration
 [build]
-builder = "nixpacks"
+builder = "DOCKERFILE"
+dockerfilePath = "Dockerfile.railway"
 
 [deploy]
+healthcheckPath = "/health"
 healthcheckTimeout = 300
-
-[env]
-NODE_ENV = "production"
-RAILWAY = "true"
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 10
